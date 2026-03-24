@@ -7,4 +7,26 @@
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authorization" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Components" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Analyzers" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Authorization" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Forms" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="10.0.5" />
+    <PackageReference Include="Microsoft.AspNetCore.Metadata" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Primitives" Version="10.0.5" />
+    <PackageReference Include="Microsoft.JSInterop" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.1" />
+    <PackageReference Include="Microsoft.Kiota.Bundle" Version="1.22.1" />
+    <PackageReference Include="Microsoft.Kiota.Serialization.Form" Version="1.22.1" />
+    <PackageReference Include="Microsoft.Kiota.Serialization.Json" Version="1.22.1" />
+    <PackageReference Include="Microsoft.Kiota.Serialization.Multipart" Version="1.22.1" />
+    <PackageReference Include="Microsoft.Kiota.Serialization.Text" Version="1.22.1" />
+    <PackageReference Include="Radzen.Blazor" Version="10.0.6" />
+  </ItemGroup>
+
 </Project>

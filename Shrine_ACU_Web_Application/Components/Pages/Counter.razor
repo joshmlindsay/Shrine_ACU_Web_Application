@@ -1,5 +1,8 @@
 ﻿@page "/counter"
 @rendermode InteractiveServer
+@using AcuCarShowClient
+@using AcuCarShowClient.Models
+@inject AcuCarShowClient _client
 
 <PageTitle>Counter</PageTitle>
 
@@ -10,7 +13,18 @@
 <button class="btn btn-primary" @onclick="IncrementCount">Click me</button>
 
 @code {
+    private List<CarShowDto> carShows = new List<CarShowDto>();
+
     private int currentCount = 0;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        var response = await _client.Api.CarShows.GetAsync();
+        if (response is not null)
+        {
+            carShows = response.ToList();
+        }
+    }
 
     private void IncrementCount()
     {
