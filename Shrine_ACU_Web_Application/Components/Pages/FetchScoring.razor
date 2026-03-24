@@ -1,0 +1,365 @@
+@page "/fetch-scoring"
+@rendermode InteractiveServer
+@inject AcuCarShowClient Client
+
+<PageTitle>Scoring</PageTitle>
+
+<RadzenStack Gap="1rem">
+    <RadzenText TextStyle="TextStyle.H4">Car Show Scoring</RadzenText>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Success">@successMessage</RadzenAlert>
+    }
+
+    <RadzenCard>
+        <RadzenStack Gap="1rem">
+            <RadzenRow Gap="1rem">
+                <RadzenColumn Size="12" SizeMD="6">
+                    <RadzenFormField Text="Car Show" Variant="Variant.Outlined" Style="width:100%;">
+                        <RadzenDropDown TValue="int?"
+                                        Data="@carShows"
+                                        TextProperty="Name"
+                                        ValueProperty="ShowId"
+                                        @bind-Value="selectedShowId"
+                                        Change="@OnShowChanged"
+                                        Placeholder="Select a car show"
+                                        Style="width:100%;" />
+                    </RadzenFormField>
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="6">
+                    <RadzenFormField Text="Car Entry" Variant="Variant.Outlined" Style="width:100%;">
+                        <RadzenDropDown TValue="int?"
+                                        Data="@entryOptions"
+                                        TextProperty="Label"
+                                        ValueProperty="EntryId"
+                                        @bind-Value="selectedEntryId"
+                                        Placeholder="Select a car"
+                                        Disabled="@(!entryOptions.Any())"
+                                        Style="width:100%;" />
+                    </RadzenFormField>
+                </RadzenColumn>
+            </RadzenRow>
+
+            <RadzenRow>
+                <RadzenColumn Size="12" SizeMD="6">
+                    <RadzenFormField Text="Judge Name" Variant="Variant.Outlined" Style="width:100%;">
+                        <RadzenTextBox @bind-Value="judgeName" Style="width:100%;" Placeholder="Enter your name" />
+                    </RadzenFormField>
+                </RadzenColumn>
+            </RadzenRow>
+        </RadzenStack>
+    </RadzenCard>
+
+    @if (isLoading)
+    {
+        <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+    }
+    else if (selectedShowId.HasValue && !questionAnswers.Any())
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Info">No scoring questions found for this show.</RadzenAlert>
+    }
+    else if (questionAnswers.Any())
+    {
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText TextStyle="TextStyle.H5">Questions</RadzenText>
+
+                @foreach (var question in questionAnswers)
+                {
+                    <RadzenStack Gap="0.5rem">
+                        <RadzenText>
+                            <b>@question.QuestionText</b>
+                            @if (question.Required)
+                            {
+                                <span style="color:red;"> *</span>
+                            }
+                        </RadzenText>
+
+                        @if (question.IsBoolean)
+                        {
+                            <RadzenDropDown TValue="bool?"
+                                            Data="@yesNoOptions"
+                                            TextProperty="Text"
+                                            ValueProperty="Value"
+                                            @bind-Value="question.BooleanAnswer"
+                                            Placeholder="Select Yes or No"
+                                            Style="width:220px;" />
+                        }
+                        else if (question.IsNumeric)
+                        {
+                            <RadzenNumeric TValue="double?"
+                                           @bind-Value="question.NumericAnswer"
+                                           Min="@question.MinScore"
+                                           Max="@question.MaxScore"
+                                           Style="width:220px;" />
+                            @if (question.MinScore.HasValue || question.MaxScore.HasValue)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption">Range: @DisplayRange(question.MinScore, question.MaxScore)</RadzenText>
+                            }
+                        }
+                        else
+                        {
+                            <RadzenTextArea @bind-Value="question.TextAnswer" Style="width:100%;" Rows="3" />
+                        }
+
+                        <RadzenFormField Text="Comments (optional)" Variant="Variant.Outlined" Style="width:100%;">
+                            <RadzenTextArea @bind-Value="question.Comments" Style="width:100%;" Rows="2" />
+                        </RadzenFormField>
+                    </RadzenStack>
+
+                    <hr />
+                }
+
+                <RadzenButton Text="Submit Scores" ButtonStyle="ButtonStyle.Primary" Click="@SubmitScores" />
+            </RadzenStack>
+        </RadzenCard>
+    }
+</RadzenStack>
+
+@code {
+    private readonly List<BoolOption> yesNoOptions =
+    [
+        new() { Text = "Yes", Value = true },
+        new() { Text = "No", Value = false }
+    ];
+
+    private List<CarShowDto> carShows = [];
+    private List<CarShowEntryDto> entries = [];
+    private List<EntryOption> entryOptions = [];
+    private List<QuestionAnswerModel> questionAnswers = [];
+
+    private int? selectedShowId;
+    private int? selectedEntryId;
+    private string? judgeName;
+
+    private bool isLoading;
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadShowsAsync();
+    }
+
+    private async Task LoadShowsAsync()
+    {
+        try
+        {
+            var response = await Client.Api.CarShows.GetAsync();
+            carShows = response?.Where(x => x.ShowId.HasValue).OrderBy(x => x.Name).ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load shows. {ex.Message}";
+        }
+    }
+
+    private async Task OnShowChanged(object? _)
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        selectedEntryId = null;
+        entries = [];
+        entryOptions = [];
+        questionAnswers = [];
+
+        if (!selectedShowId.HasValue)
+        {
+            return;
+        }
+
+        isLoading = true;
+
+        try
+        {
+            var loadedEntries = await Client.Api.CarShowEntries.Show[selectedShowId.Value].GetAsync();
+            entries = loadedEntries?.ToList() ?? [];
+            entryOptions = entries
+                .Select(e => new EntryOption
+                {
+                    EntryId = e.EntryId,
+                    Label = BuildEntryLabel(e)
+                })
+                .Where(x => x.EntryId.HasValue)
+                .OrderBy(x => x.Label)
+                .ToList();
+
+            var questions = await Client.Api.CarShowScoringQuestions.Show[selectedShowId.Value].GetAsync();
+            questionAnswers = (questions ?? [])
+                .OrderBy(q => q.SortOrder ?? int.MaxValue)
+                .ThenBy(q => q.QuestionId ?? int.MaxValue)
+                .Select(q => new QuestionAnswerModel
+                {
+                    QuestionId = q.QuestionId,
+                    QuestionText = q.QuestionText ?? "Untitled question",
+                    AnswerType = q.AnswerType,
+                    Required = q.Required ?? false,
+                    MinScore = q.MinScore,
+                    MaxScore = q.MaxScore,
+                    IsNumeric = IsNumericType(q.AnswerType),
+                    IsBoolean = IsBooleanType(q.AnswerType)
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load entries/questions for selected show. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SubmitScores()
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        if (!selectedShowId.HasValue)
+        {
+            errorMessage = "Please select a car show.";
+            return;
+        }
+
+        if (!selectedEntryId.HasValue)
+        {
+            errorMessage = "Please select a car entry to score.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(judgeName))
+        {
+            errorMessage = "Please provide judge name.";
+            return;
+        }
+
+        var missingRequired = questionAnswers.Where(q => q.Required && !q.HasValue()).ToList();
+        if (missingRequired.Any())
+        {
+            errorMessage = $"Please answer all required questions ({missingRequired.Count} missing).";
+            return;
+        }
+
+        var answersToSubmit = questionAnswers
+            .Where(q => q.HasValue() && q.QuestionId.HasValue)
+            .Select(q => new CarShowAnswerDto
+            {
+                EntryId = selectedEntryId,
+                QuestionId = q.QuestionId,
+                NumericAnswer = q.NumericAnswer,
+                BooleanAnswer = q.IsBoolean ? q.BooleanAnswer : null,
+                TextAnswer = q.IsNumeric || q.IsBoolean ? null : q.TextAnswer,
+                Comments = q.Comments,
+                JudgedBy = judgeName,
+                AnsweredDate = DateTimeOffset.UtcNow,
+                LastModified = DateTimeOffset.UtcNow
+            })
+            .ToList();
+
+        if (!answersToSubmit.Any())
+        {
+            errorMessage = "No answers to submit.";
+            return;
+        }
+
+        try
+        {
+            foreach (var answer in answersToSubmit)
+            {
+                await Client.Api.CarShowAnswers.PostAsync(answer);
+            }
+
+            successMessage = $"Submitted {answersToSubmit.Count} answer(s).";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to submit scores. {ex.Message}";
+        }
+    }
+
+    private static string BuildEntryLabel(CarShowEntryDto entry)
+    {
+        var year = entry.CarDetail?.Year?.ToString() ?? "-";
+        var make = string.IsNullOrWhiteSpace(entry.CarDetail?.Make) ? "-" : entry.CarDetail!.Make;
+        var model = string.IsNullOrWhiteSpace(entry.CarDetail?.Model) ? "-" : entry.CarDetail!.Model;
+        var entryNumber = entry.EntryNumber?.ToString() ?? "-";
+        var vin = string.IsNullOrWhiteSpace(entry.Vin) ? "-" : entry.Vin;
+
+        return $"#{entryNumber} - {year} {make} {model} ({vin})";
+    }
+
+    private static bool IsNumericType(string? answerType)
+    {
+        if (string.IsNullOrWhiteSpace(answerType)) return true;
+        var normalized = answerType.Trim().ToLowerInvariant();
+        return normalized.Contains("number") || normalized.Contains("numeric") || normalized.Contains("score") || normalized.Contains("decimal") || normalized.Contains("int");
+    }
+
+    private static bool IsBooleanType(string? answerType)
+    {
+        if (string.IsNullOrWhiteSpace(answerType)) return false;
+        var normalized = answerType.Trim().ToLowerInvariant();
+        return normalized.Contains("bool") || normalized.Contains("yes") || normalized.Contains("no") || normalized.Contains("switch") || normalized.Contains("checkbox");
+    }
+
+    private static string DisplayRange(int? min, int? max)
+    {
+        if (!min.HasValue && !max.HasValue) return "Any";
+        if (!min.HasValue) return $"<= {max}";
+        if (!max.HasValue) return $">= {min}";
+        return $"{min} - {max}";
+    }
+
+    private sealed class EntryOption
+    {
+        public int? EntryId { get; set; }
+        public string Label { get; set; } = string.Empty;
+    }
+
+    private sealed class BoolOption
+    {
+        public string Text { get; set; } = string.Empty;
+        public bool? Value { get; set; }
+    }
+
+    private sealed class QuestionAnswerModel
+    {
+        public int? QuestionId { get; set; }
+        public string QuestionText { get; set; } = string.Empty;
+        public string? AnswerType { get; set; }
+        public bool Required { get; set; }
+        public int? MinScore { get; set; }
+        public int? MaxScore { get; set; }
+
+        public bool IsNumeric { get; set; }
+        public bool IsBoolean { get; set; }
+
+        public double? NumericAnswer { get; set; }
+        public bool? BooleanAnswer { get; set; }
+        public string? TextAnswer { get; set; }
+        public string? Comments { get; set; }
+
+        public bool HasValue()
+        {
+            if (IsBoolean)
+            {
+                return BooleanAnswer.HasValue;
+            }
+
+            if (IsNumeric)
+            {
+                return NumericAnswer.HasValue;
+            }
+
+            return !string.IsNullOrWhiteSpace(TextAnswer);
+        }
+    }
+}

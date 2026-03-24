@@ -1,3 +1,6 @@
+using Microsoft.Kiota.Abstractions.Authentication;
+using Microsoft.Kiota.Http.HttpClientLibrary;
+using Radzen;
 using Shrine_ACU_Web_Application.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -5,6 +8,33 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddRadzenComponents();
+
+builder.Services.AddHttpClient("AcuCarShowApi", (sp, client) =>
+{
+    var configuration = sp.GetRequiredService<IConfiguration>();
+    var baseUrl = configuration["AcuCarShowApi:BaseUrl"];
+
+    if (!string.IsNullOrWhiteSpace(baseUrl))
+    {
+        client.BaseAddress = new Uri(baseUrl);
+    }
+});
+
+builder.Services.AddScoped<AcuCarShowClient.AcuCarShowClient>((sp) =>
+{
+    var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+    var httpClient = httpClientFactory.CreateClient("AcuCarShowApi");
+    var requestAdapter = new HttpClientRequestAdapter(new AnonymousAuthenticationProvider(), httpClient: httpClient);
+
+    if (httpClient.BaseAddress is not null)
+    {
+        requestAdapter.BaseUrl = httpClient.BaseAddress.ToString();
+    }
+
+    return new AcuCarShowClient.AcuCarShowClient(requestAdapter);
+});
 
 var app = builder.Build();
 

@@ -1,0 +1,36 @@
+@page "/fetch-login"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+
+<PageTitle>Login</PageTitle>
+
+<RadzenRow JustifyContent="JustifyContent.Center" class="mt-5">
+    <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText TextStyle="TextStyle.H4">Login</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">Connection is intentionally not wired yet.</RadzenText>
+
+                <RadzenFormField Text="Username" Variant="Variant.Outlined">
+                    <RadzenTextBox Name="Username" @bind-Value="username" Style="width:100%;" />
+                </RadzenFormField>
+
+                <RadzenFormField Text="Password" Variant="Variant.Outlined">
+                    <RadzenPassword Name="Password" @bind-Value="password" Style="width:100%;" />
+                </RadzenFormField>
+
+                <RadzenButton Text="Login" Icon="login" ButtonStyle="ButtonStyle.Primary" Click="GoToCarShows" Style="width:100%;" />
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenColumn>
+</RadzenRow>
+
+@code {
+    private string? username;
+    private string? password;
+
+    private void GoToCarShows()
+    {
+        Navigation.NavigateTo("/fetch-carshows");
+    }
+}

@@ -1,0 +1,240 @@
+@page "/fetch-signup"
+@page "/fetch-signup/{ShowId:int}"
+@rendermode InteractiveServer
+@inject AcuCarShowClient Client
+
+<PageTitle>Car Show Signup</PageTitle>
+
+<RadzenStack Gap="1rem">
+    <RadzenText TextStyle="TextStyle.H4">Car Show Signup</RadzenText>
+    <RadzenText TextStyle="TextStyle.Body2">You can open this page directly, or pass a show id like <b>/fetch-signup/5</b> or <b>/fetch-signup?carshowid=5</b>.</RadzenText>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Success">@successMessage</RadzenAlert>
+    }
+
+    @if (isLoading)
+    {
+        <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+    }
+    else
+    {
+        <RadzenTemplateForm TItem="SignupFormModel" Data="@form" Submit="@SubmitSignup">
+            <RadzenCard>
+                <RadzenStack Gap="1rem">
+                    <RadzenText TextStyle="TextStyle.H5">Show Selection</RadzenText>
+
+                    <RadzenRow>
+                        <RadzenColumn Size="12" SizeMD="6">
+                            <RadzenFormField Text="Car Show" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenDropDown Name="ShowId"
+                                                TValue="int?"
+                                                Data="@carShows"
+                                                TextProperty="Name"
+                                                ValueProperty="ShowId"
+                                                @bind-Value="form.ShowId"
+                                                Placeholder="Select a car show"
+                                                Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="ShowId" Text="Car show is required" Popup="true" />
+                        </RadzenColumn>
+                    </RadzenRow>
+
+                    <RadzenText TextStyle="TextStyle.H5">Personal Information</RadzenText>
+
+                    <RadzenRow Gap="1rem">
+                        <RadzenColumn Size="12" SizeMD="6">
+                            <RadzenFormField Text="First Name" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="FirstName" @bind-Value="form.FirstName" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="FirstName" Text="First name is required" Popup="true" />
+                        </RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="6">
+                            <RadzenFormField Text="Last Name" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="LastName" @bind-Value="form.LastName" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="LastName" Text="Last name is required" Popup="true" />
+                        </RadzenColumn>
+                    </RadzenRow>
+
+                    <RadzenRow Gap="1rem">
+                        <RadzenColumn Size="12" SizeMD="6">
+                            <RadzenFormField Text="Email" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="Email" @bind-Value="form.Email" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="Email" Text="Email is required" Popup="true" />
+                            <RadzenEmailValidator Component="Email" Text="Enter a valid email" Popup="true" />
+                        </RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="6">
+                            <RadzenFormField Text="Phone" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="Phone" @bind-Value="form.Phone" Style="width:100%;" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                    </RadzenRow>
+
+                    <RadzenText TextStyle="TextStyle.H5">Car Information</RadzenText>
+
+                    <RadzenRow Gap="1rem">
+                        <RadzenColumn Size="12" SizeMD="4">
+                            <RadzenFormField Text="Year" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenNumeric Name="Year" TValue="int?" @bind-Value="form.Year" Style="width:100%;" Min="1900" Max="2100" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="Year" Text="Year is required" Popup="true" />
+                        </RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="4">
+                            <RadzenFormField Text="Make" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="Make" @bind-Value="form.Make" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="Make" Text="Make is required" Popup="true" />
+                        </RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="4">
+                            <RadzenFormField Text="Model" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="Model" @bind-Value="form.Model" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="Model" Text="Model is required" Popup="true" />
+                        </RadzenColumn>
+                    </RadzenRow>
+
+                    <RadzenRow Gap="1rem">
+                        <RadzenColumn Size="12" SizeMD="6">
+                            <RadzenFormField Text="VIN" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="Vin" @bind-Value="form.Vin" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="Vin" Text="VIN is required" Popup="true" />
+                        </RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="6">
+                            <RadzenFormField Text="Color" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="Color" @bind-Value="form.Color" Style="width:100%;" />
+                            </RadzenFormField>
+                        </RadzenColumn>
+                    </RadzenRow>
+
+                    <RadzenButton Text="Submit Signup" ButtonType="ButtonType.Submit" ButtonStyle="ButtonStyle.Primary" Icon="save" />
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenTemplateForm>
+    }
+</RadzenStack>
+
+@code {
+    [Parameter]
+    public int? ShowId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "carshowid")]
+    public int? CarShowIdQuery { get; set; }
+
+    private List<CarShowDto> carShows = [];
+    private SignupFormModel form = new();
+    private bool isLoading = true;
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadShowsAsync();
+        ApplyPrefilledShowId();
+    }
+
+    protected override void OnParametersSet()
+    {
+        ApplyPrefilledShowId();
+    }
+
+    private async Task LoadShowsAsync()
+    {
+        try
+        {
+            var response = await Client.Api.CarShows.GetAsync();
+            carShows = response?.Where(x => x.ShowId.HasValue).OrderBy(x => x.Name).ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load car shows. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ApplyPrefilledShowId()
+    {
+        var preferredShowId = ShowId ?? CarShowIdQuery;
+
+        if (!preferredShowId.HasValue)
+        {
+            return;
+        }
+
+        var exists = carShows.Any(x => x.ShowId == preferredShowId.Value);
+        if (exists)
+        {
+            form.ShowId = preferredShowId.Value;
+        }
+    }
+
+    private async Task SubmitSignup(SignupFormModel _)
+    {
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            var selectedShow = carShows.FirstOrDefault(x => x.ShowId == form.ShowId);
+
+            var entry = new CarShowEntryDto
+            {
+                ShowId = form.ShowId,
+                Vin = form.Vin,
+                Category = selectedShow?.Category,
+                Status = "Pending",
+                RegistrationDate = DateTimeOffset.UtcNow,
+                CarDetail = new CarDetailDto
+                {
+                    Vin = form.Vin,
+                    Year = form.Year,
+                    Make = form.Make,
+                    Model = form.Model,
+                    Color = form.Color,
+                    Owner = $"{form.FirstName} {form.LastName}".Trim(),
+                    Status = "Pending"
+                },
+                Notes = BuildContactNotes()
+            };
+
+            await Client.Api.CarShowEntries.PostAsync(entry);
+
+            successMessage = "Signup submitted successfully.";
+            form = new SignupFormModel { ShowId = form.ShowId };
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to submit signup. {ex.Message}";
+        }
+    }
+
+    private string BuildContactNotes()
+    {
+        return $"Name: {form.FirstName} {form.LastName}; Email: {form.Email}; Phone: {form.Phone}";
+    }
+
+    private sealed class SignupFormModel
+    {
+        public int? ShowId { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public int? Year { get; set; }
+        public string? Make { get; set; }
+        public string? Model { get; set; }
+        public string? Vin { get; set; }
+        public string? Color { get; set; }
+    }
+}

@@ -1,0 +1,202 @@
+@page "/fetch-carshows"
+@rendermode InteractiveServer
+@inject AcuCarShowClient Client
+@inject DialogService DialogService
+
+<PageTitle>Car Shows</PageTitle>
+
+<RadzenDialog />
+
+<RadzenStack Gap="1rem">
+    <RadzenText TextStyle="TextStyle.H4">Car Show Browser</RadzenText>
+
+    <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenFormField Text="Select Car Show" Variant="Variant.Outlined" Style="width:100%;">
+                <RadzenDropDown TValue="int?"
+                                Data="@carShows"
+                                TextProperty="Name"
+                                ValueProperty="ShowId"
+                                @bind-Value="selectedShowId"
+                                Change="@OnShowSelectionChanged"
+                                AllowClear="true"
+                                Placeholder="Choose a show"
+                                Style="width:100%;" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+    }
+
+    @if (isLoading)
+    {
+        <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+    }
+
+    @if (selectedShow is not null)
+    {
+        <RadzenCard>
+            <RadzenStack Gap="0.5rem">
+                <RadzenText TextStyle="TextStyle.H5">@selectedShow.Name</RadzenText>
+                <RadzenRow>
+                    <RadzenColumn Size="12" SizeMD="6"><b>Location:</b> @Display(selectedShow.Location)</RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6"><b>Category:</b> @Display(selectedShow.Category)</RadzenColumn>
+                </RadzenRow>
+                <RadzenRow>
+                    <RadzenColumn Size="12" SizeMD="6"><b>Event Date:</b> @DisplayDate(selectedShow.EventDate)</RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6"><b>Total Participants:</b> @Display(selectedShow.TotalParticipants)</RadzenColumn>
+                </RadzenRow>
+                <RadzenText><b>Description:</b> @Display(selectedShow.Description)</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenDataGrid Data="@entries" TItem="CarShowEntryDto" AllowPaging="true" PageSize="10" EmptyText="No cars found for this show.">
+            <Columns>
+                <RadzenDataGridColumn TItem="CarShowEntryDto" Property="EntryNumber" Title="#" Width="80px" />
+                <RadzenDataGridColumn TItem="CarShowEntryDto" Property="Vin" Title="VIN" Width="220px" />
+                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Year">
+                    <Template Context="entry">@Display(entry.CarDetail?.Year)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Make">
+                    <Template Context="entry">@Display(entry.CarDetail?.Make)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Model">
+                    <Template Context="entry">@Display(entry.CarDetail?.Model)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Owner">
+                    <Template Context="entry">@Display(entry.CarDetail?.Owner)</Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Details" Sortable="false" Filterable="false" Width="110px">
+                    <Template Context="entry">
+                        <RadzenButton Text="Details" Size="ButtonSize.Small" Click="@(async _ => await OpenDetails(entry))" />
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+        </RadzenDataGrid>
+    }
+</RadzenStack>
+
+@code {
+    private List<CarShowDto> carShows = [];
+    private List<CarShowEntryDto> entries = [];
+    private CarShowDto? selectedShow;
+    private int? selectedShowId;
+    private bool isLoading;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var response = await Client.Api.CarShows.GetAsync();
+            carShows = response?.Where(x => x.ShowId.HasValue).ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load car shows. {ex.Message}";
+        }
+    }
+
+    private async Task OnShowSelectionChanged(object? _)
+    {
+        if (!selectedShowId.HasValue)
+        {
+            selectedShow = null;
+            entries = [];
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            selectedShow = await Client.Api.CarShows.Details[selectedShowId.Value].GetAsync();
+            entries = await LoadEntriesWithCarDetailsAsync(selectedShowId.Value);
+        }
+        catch (Exception ex)
+        {
+            selectedShow = null;
+            entries = [];
+            errorMessage = $"Unable to load show details. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task<List<CarShowEntryDto>> LoadEntriesWithCarDetailsAsync(int showId)
+    {
+        var showEntries = (await Client.Api.CarShowEntries.Show[showId].GetAsync())?.ToList() ?? [];
+
+        foreach (var entry in showEntries.Where(x => x.CarDetail is null && !string.IsNullOrWhiteSpace(x.Vin)))
+        {
+            try
+            {
+                entry.CarDetail = await Client.Api.CarDetails[entry.Vin!].GetAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        return showEntries;
+    }
+
+    private async Task OpenDetails(CarShowEntryDto entry)
+    {
+        errorMessage = null;
+
+        if (entry.CarDetail is null && !string.IsNullOrWhiteSpace(entry.Vin))
+        {
+            try
+            {
+                entry.CarDetail = await Client.Api.CarDetails[entry.Vin!].GetAsync();
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Unable to load full details for VIN {entry.Vin}. Showing available data. {ex.Message}";
+            }
+        }
+
+        var detail = entry.CarDetail ?? new CarDetailDto
+        {
+            Vin = entry.Vin,
+            Status = entry.Status
+        };
+
+        await DialogService.OpenAsync<ModalCarDetail>(
+            $"{Display(detail.Year)} {Display(detail.Make)} {Display(detail.Model)}",
+            new Dictionary<string, object>
+            {
+                { nameof(ModalCarDetail.CarDetail), detail }
+            },
+            new DialogOptions
+            {
+                Width = "700px",
+                CloseDialogOnEsc = true,
+                CloseDialogOnOverlayClick = true,
+                Resizable = true,
+                Draggable = true
+            });
+    }
+
+    private static string Display(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "-" : value;
+    }
+
+    private static string Display(int? value)
+    {
+        return value?.ToString() ?? "-";
+    }
+
+    private static string DisplayDate(DateTimeOffset? value)
+    {
+        return value?.ToString("MMM dd, yyyy") ?? "-";
+    }
+}
