@@ -1,11 +1,20 @@
 @page "/fetch-scoring"
 @rendermode InteractiveServer
 @inject AcuCarShowClient Client
+@inject NavigationManager Navigation
+@inject UserSessionService UserSession
 
 <PageTitle>Scoring</PageTitle>
 
+@if (!UserSession.IsAuthenticated)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in before using scoring.</RadzenAlert>
+}
+else
+{
 <RadzenStack Gap="1rem">
     <RadzenText TextStyle="TextStyle.H4">Car Show Scoring</RadzenText>
+    <RadzenText TextStyle="TextStyle.Caption">Acting user: @UserSession.EffectiveDisplayName</RadzenText>
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
@@ -20,7 +29,7 @@
     <RadzenCard>
         <RadzenStack Gap="1rem">
             <RadzenRow Gap="1rem">
-                <RadzenColumn Size="12" SizeMD="6">
+                <RadzenColumn Size="12" SizeMD="4">
                     <RadzenFormField Text="Car Show" Variant="Variant.Outlined" Style="width:100%;">
                         <RadzenDropDown TValue="int?"
                                         Data="@carShows"
@@ -28,99 +37,308 @@
                                         ValueProperty="ShowId"
                                         @bind-Value="selectedShowId"
                                         Change="@OnShowChanged"
+                                        AllowClear="true"
                                         Placeholder="Select a car show"
                                         Style="width:100%;" />
                     </RadzenFormField>
                 </RadzenColumn>
-                <RadzenColumn Size="12" SizeMD="6">
+                <RadzenColumn Size="12" SizeMD="5">
                     <RadzenFormField Text="Car Entry" Variant="Variant.Outlined" Style="width:100%;">
                         <RadzenDropDown TValue="int?"
                                         Data="@entryOptions"
                                         TextProperty="Label"
                                         ValueProperty="EntryId"
                                         @bind-Value="selectedEntryId"
+                                        Change="@OnEntryChanged"
+                                        AllowClear="true"
                                         Placeholder="Select a car"
                                         Disabled="@(!entryOptions.Any())"
                                         Style="width:100%;" />
                     </RadzenFormField>
                 </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="3">
+                    <RadzenFormField Text="Judge Name" Variant="Variant.Outlined" Style="width:100%;">
+                        <RadzenDropDown TValue="string"
+                                        Data="@judgeOptions"
+                                        TextProperty="DisplayName"
+                                        ValueProperty="DisplayName"
+                                        @bind-Value="judgeName"
+                                        Disabled="@(!CanEditSelectedEntry)"
+                                        AllowClear="true"
+                                        AllowFiltering="true"
+                                        Placeholder="Select a judge"
+                                        Style="width:100%;" />
+                    </RadzenFormField>
+                </RadzenColumn>
             </RadzenRow>
 
-            <RadzenRow>
-                <RadzenColumn Size="12" SizeMD="6">
-                    <RadzenFormField Text="Judge Name" Variant="Variant.Outlined" Style="width:100%;">
-                        <RadzenTextBox @bind-Value="judgeName" Style="width:100%;" Placeholder="Enter your name" />
-                    </RadzenFormField>
+            <RadzenRow Gap="1rem">
+                <RadzenColumn Size="12" SizeMD="4">
+                    <RadzenButton Text="Refresh Entry"
+                                  Icon="refresh"
+                                  ButtonStyle="ButtonStyle.Light"
+                                  Disabled="@(!selectedEntryId.HasValue || isBusy)"
+                                  Click="@RefreshEntryAsync" />
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="4">
+                    <RadzenButton Text="Refresh Scoreboard"
+                                  Icon="leaderboard"
+                                  ButtonStyle="ButtonStyle.Light"
+                                  Disabled="@(!selectedShowId.HasValue || isBusy)"
+                                  Click="@RefreshScoreboardAsync" />
+                </RadzenColumn>
+                <RadzenColumn Size="12" SizeMD="4">
+                    <RadzenButton Text="Run Final Scores"
+                                  Icon="calculate"
+                                  ButtonStyle="ButtonStyle.Secondary"
+                                  Disabled="@(!CanRunFinalScores)"
+                                  Click="@RunFinalScoresAsync" />
                 </RadzenColumn>
             </RadzenRow>
         </RadzenStack>
     </RadzenCard>
 
-    @if (isLoading)
+    @if (selectedEntryId.HasValue && !CanEditSelectedEntry)
     {
-        <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+        <RadzenAlert AlertStyle="AlertStyle.Info">Read-only mode: admins can edit any entry, non-admin users can only edit entries they submitted.</RadzenAlert>
     }
-    else if (selectedShowId.HasValue && !questionAnswers.Any())
+
+    @if (isBusy)
     {
-        <RadzenAlert AlertStyle="AlertStyle.Info">No scoring questions found for this show.</RadzenAlert>
+        <RadzenStack Gap="0.5rem">
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+            @if (!string.IsNullOrWhiteSpace(busyMessage))
+            {
+                <RadzenText TextStyle="TextStyle.Caption">@busyMessage</RadzenText>
+            }
+        </RadzenStack>
     }
-    else if (questionAnswers.Any())
+
+    @if (!selectedShowId.HasValue)
     {
+        <RadzenAlert AlertStyle="AlertStyle.Info">Select a car show to enter scores, preview calculations, and view the scoreboard.</RadzenAlert>
+    }
+    else
+    {
+        <RadzenRow Gap="1rem">
+            <RadzenColumn Size="12" SizeLG="8">
+                @if (!selectedEntryId.HasValue)
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Info">Select an entry to load existing answers or enter new scores.</RadzenAlert>
+                }
+                else if (!questionAnswers.Any())
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Info">No scoring questions found for this show.</RadzenAlert>
+                }
+                else
+                {
+                    <RadzenCard>
+                        <RadzenStack Gap="1rem">
+                            <RadzenText TextStyle="TextStyle.H5">Judge Entry</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Body1">@SelectedEntryLabel</RadzenText>
+                            <RadzenText TextStyle="TextStyle.Caption">Existing answers are loaded automatically. Saving updates existing answers and removes cleared optional answers.</RadzenText>
+
+                            @foreach (var question in questionAnswers)
+                            {
+                                <RadzenCard Variant="Variant.Flat" Style="border:1px solid var(--rz-base-300);">
+                                    <RadzenStack Gap="0.75rem">
+                                        <RadzenRow Gap="1rem">
+                                            <RadzenColumn Size="12" SizeMD="8">
+                                                <RadzenText>
+                                                    <b>@question.QuestionText</b>
+                                                    @if (question.Required)
+                                                    {
+                                                        <span style="color:red;"> *</span>
+                                                    }
+                                                </RadzenText>
+                                            </RadzenColumn>
+                                            <RadzenColumn Size="12" SizeMD="4">
+                                                <RadzenStack Gap="0.5rem">
+                                                    <RadzenBadge Text="@question.DisplayAnswerType" BadgeStyle="@GetAnswerTypeBadgeStyle(question)" />
+                                                    @if (question.AnswerId.HasValue)
+                                                    {
+                                                        <RadzenBadge Text="Saved" BadgeStyle="BadgeStyle.Success" />
+                                                    }
+                                                </RadzenStack>
+                                            </RadzenColumn>
+                                        </RadzenRow>
+
+                                        @if (question.IsBoolean)
+                                        {
+                                            <RadzenDropDown TValue="bool?"
+                    Data="@yesNoOptions"
+                    TextProperty="Text"
+                    ValueProperty="Value"
+                    @bind-Value="question.BooleanAnswer"
+                    AllowClear="true"
+                    Disabled="@(!CanEditSelectedEntry)"
+                    Placeholder="Select Yes or No"
+                    Style="width:220px;" />
+                                        }
+                                        else if (question.IsNumeric)
+                                        {
+                                            <RadzenStack Gap="0.5rem">
+                                                <RadzenNumeric TValue="double?"
+                                                               @bind-Value="question.NumericAnswer"
+                                                               Min="@ToNullableDecimal(question.MinScore)"
+                                                               Max="@ToNullableDecimal(question.MaxScore)"
+                                                               Disabled="@(!CanEditSelectedEntry)"
+                                                               Style="width:220px;" />
+                                                @if (question.MinScore.HasValue || question.MaxScore.HasValue)
+                                                {
+                                                    <RadzenText TextStyle="TextStyle.Caption">Range: @DisplayRange(question.MinScore, question.MaxScore)</RadzenText>
+                                                }
+                                            </RadzenStack>
+                                        }
+                                        else
+                                        {
+                                            <RadzenTextArea @bind-Value="question.TextAnswer" Disabled="@(!CanEditSelectedEntry)" Style="width:100%;" Rows="3" />
+                                        }
+
+                                        <RadzenFormField Text="Comments (optional)" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextArea @bind-Value="question.Comments" Disabled="@(!CanEditSelectedEntry)" Style="width:100%;" Rows="2" />
+                                        </RadzenFormField>
+
+                                        @if (!string.IsNullOrWhiteSpace(question.SavedBy) || question.LastModified.HasValue)
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption">Last saved by @Display(question.SavedBy) on @DisplayDateTime(question.LastModified ?? question.AnsweredDate)</RadzenText>
+                                        }
+                                    </RadzenStack>
+                                </RadzenCard>
+                            }
+
+                            <RadzenButton Text="Submit Scores"
+                                          Icon="save"
+                                          ButtonStyle="ButtonStyle.Primary"
+                                          Disabled="@(isBusy || !CanEditSelectedEntry)"
+                                          Click="@SubmitScores" />
+                        </RadzenStack>
+                    </RadzenCard>
+                }
+            </RadzenColumn>
+
+            <RadzenColumn Size="12" SizeLG="4">
+                <RadzenStack Gap="1rem">
+                    <RadzenCard>
+                        <RadzenStack Gap="0.75rem">
+                            <RadzenText TextStyle="TextStyle.H5">Calculation Preview</RadzenText>
+
+                            @if (!selectedEntryId.HasValue)
+                            {
+                                <RadzenAlert AlertStyle="AlertStyle.Info">Choose an entry to preview score calculations.</RadzenAlert>
+                            }
+                            else if (scorePreview is null)
+                            {
+                                <RadzenAlert AlertStyle="AlertStyle.Warning">No calculation preview is currently available for this entry.</RadzenAlert>
+                            }
+                            else
+                            {
+                                <RadzenText TextStyle="TextStyle.H6">Final Score: @DisplayScore(scorePreview.FinalScore)</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption">VIN: @Display(scorePreview.Vin)</RadzenText>
+
+                                @if (scorePreview.QuestionGroupScores?.Any() == true)
+                                {
+                                    <RadzenText TextStyle="TextStyle.Body1"><b>Question Groups</b></RadzenText>
+
+                                    @foreach (var group in scorePreview.QuestionGroupScores.OrderBy(x => x.GroupName))
+                                    {
+                                        <RadzenCard Variant="Variant.Flat" Style="border:1px solid var(--rz-base-300);">
+                                            <RadzenStack Gap="0.5rem">
+                                                <RadzenText><b>@Display(group.GroupName)</b></RadzenText>
+                                                <RadzenBadge Text="@Display(group.OperationType)" BadgeStyle="@GetOperationBadgeStyle(group.OperationType)" />
+                                                <RadzenText>Score: @DisplayScore(group.Score)</RadzenText>
+
+                                                @if (group.QuestionValues?.Any() == true)
+                                                {
+                                                    @foreach (var value in group.QuestionValues.OrderBy(x => x.QuestionId))
+                                                    {
+                                                        <RadzenText TextStyle="TextStyle.Caption">@GetQuestionLabel(value.QuestionId): @DisplayScore(value.Value)</RadzenText>
+                                                    }
+                                                }
+                                            </RadzenStack>
+                                        </RadzenCard>
+                                    }
+                                }
+
+                                @if (scorePreview.GroupCalculationScores?.Any() == true)
+                                {
+                                    <RadzenText TextStyle="TextStyle.Body1"><b>Group Calculations</b></RadzenText>
+
+                                    @foreach (var groupCalc in scorePreview.GroupCalculationScores.OrderBy(x => x.CalculationName))
+                                    {
+                                        <RadzenCard Variant="Variant.Flat" Style="border:1px solid var(--rz-base-300);">
+                                            <RadzenStack Gap="0.5rem">
+                                                <RadzenText><b>@Display(groupCalc.CalculationName)</b></RadzenText>
+                                                <RadzenBadge Text="@Display(groupCalc.OperationType)" BadgeStyle="@GetOperationBadgeStyle(groupCalc.OperationType)" />
+                                                <RadzenText>Score: @DisplayScore(groupCalc.Score)</RadzenText>
+
+                                                @if (groupCalc.QuestionCalculationGroupIds?.Any() == true)
+                                                {
+                                                    <RadzenText TextStyle="TextStyle.Caption">Groups: @string.Join(", ", groupCalc.QuestionCalculationGroupIds.Where(x => x.HasValue).Select(GetQuestionGroupLabel))</RadzenText>
+                                                }
+                                            </RadzenStack>
+                                        </RadzenCard>
+                                    }
+                                }
+                            }
+                        </RadzenStack>
+                    </RadzenCard>
+
+                    <RadzenCard>
+                        <RadzenStack Gap="0.75rem">
+                            <RadzenText TextStyle="TextStyle.H5">Persisted Final Score</RadzenText>
+
+                            @if (selectedFinalScore is null)
+                            {
+                                <RadzenAlert AlertStyle="AlertStyle.Info">No persisted final score found for the selected entry.</RadzenAlert>
+                            }
+                            else
+                            {
+                                <RadzenText TextStyle="TextStyle.H6">@DisplayScore(selectedFinalScore.Score)</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption">Calculated: @DisplayDateTime(selectedFinalScore.CalculatedDate)</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption">VIN: @Display(selectedFinalScore.Vin)</RadzenText>
+                                <RadzenText>@Display(selectedFinalScore.CalculationSummary)</RadzenText>
+                            }
+                        </RadzenStack>
+                    </RadzenCard>
+                </RadzenStack>
+            </RadzenColumn>
+        </RadzenRow>
+
         <RadzenCard>
             <RadzenStack Gap="1rem">
-                <RadzenText TextStyle="TextStyle.H5">Questions</RadzenText>
+                <RadzenText TextStyle="TextStyle.H5">Final Scoreboard</RadzenText>
 
-                @foreach (var question in questionAnswers)
+                @if (!scoreboardRows.Any())
                 {
-                    <RadzenStack Gap="0.5rem">
-                        <RadzenText>
-                            <b>@question.QuestionText</b>
-                            @if (question.Required)
-                            {
-                                <span style="color:red;"> *</span>
-                            }
-                        </RadzenText>
-
-                        @if (question.IsBoolean)
-                        {
-                            <RadzenDropDown TValue="bool?"
-                                            Data="@yesNoOptions"
-                                            TextProperty="Text"
-                                            ValueProperty="Value"
-                                            @bind-Value="question.BooleanAnswer"
-                                            Placeholder="Select Yes or No"
-                                            Style="width:220px;" />
-                        }
-                        else if (question.IsNumeric)
-                        {
-                            <RadzenNumeric TValue="double?"
-                                           @bind-Value="question.NumericAnswer"
-                                           Min="@question.MinScore"
-                                           Max="@question.MaxScore"
-                                           Style="width:220px;" />
-                            @if (question.MinScore.HasValue || question.MaxScore.HasValue)
-                            {
-                                <RadzenText TextStyle="TextStyle.Caption">Range: @DisplayRange(question.MinScore, question.MaxScore)</RadzenText>
-                            }
-                        }
-                        else
-                        {
-                            <RadzenTextArea @bind-Value="question.TextAnswer" Style="width:100%;" Rows="3" />
-                        }
-
-                        <RadzenFormField Text="Comments (optional)" Variant="Variant.Outlined" Style="width:100%;">
-                            <RadzenTextArea @bind-Value="question.Comments" Style="width:100%;" Rows="2" />
-                        </RadzenFormField>
-                    </RadzenStack>
-
-                    <hr />
+                    <RadzenAlert AlertStyle="AlertStyle.Info">No persisted final scores exist for this show yet. Use Run Final Scores to generate the leaderboard.</RadzenAlert>
                 }
-
-                <RadzenButton Text="Submit Scores" ButtonStyle="ButtonStyle.Primary" Click="@SubmitScores" />
+                else
+                {
+                    <RadzenDataGrid Data="@scoreboardRows" TItem="ScoreboardRow" AllowPaging="true" PageSize="10" EmptyText="No final scores found.">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="ScoreboardRow" Property="Rank" Title="Rank" Width="80px" />
+                            <RadzenDataGridColumn TItem="ScoreboardRow" Property="EntryLabel" Title="Entry" />
+                            <RadzenDataGridColumn TItem="ScoreboardRow" Property="Vin" Title="VIN" Width="220px" />
+                            <RadzenDataGridColumn TItem="ScoreboardRow" Title="Score" Width="120px">
+                                <Template Context="item">
+                                    @DisplayScore(item.Score)
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="ScoreboardRow" Title="Calculated" Width="200px">
+                                <Template Context="item">
+                                    @DisplayDateTime(item.CalculatedDate)
+                                </Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="ScoreboardRow" Property="CalculationSummary" Title="Summary" />
+                        </Columns>
+                    </RadzenDataGrid>
+                }
             </RadzenStack>
         </RadzenCard>
     }
 </RadzenStack>
+}
 
 @code {
     private readonly List<BoolOption> yesNoOptions =
@@ -132,18 +350,40 @@
     private List<CarShowDto> carShows = [];
     private List<CarShowEntryDto> entries = [];
     private List<EntryOption> entryOptions = [];
+    private List<JudgeOption> judgeOptions = [];
+    private List<CarShowScoringQuestionDto> scoringQuestions = [];
     private List<QuestionAnswerModel> questionAnswers = [];
+    private List<CarShowFinalScoreDto> finalScores = [];
+    private List<ScoreboardRow> scoreboardRows = [];
+
+    private Dictionary<int, CarShowAnswerDto> existingAnswersByQuestionId = [];
+    private Dictionary<int, string> questionLabelsById = [];
+    private Dictionary<int, string> questionGroupLabelsById = [];
+
+    private CarShowScoreCalculationResultDto? scorePreview;
+    private CarShowFinalScoreDto? selectedFinalScore;
 
     private int? selectedShowId;
     private int? selectedEntryId;
     private string? judgeName;
 
-    private bool isLoading;
+    private bool isBusy;
+    private string? busyMessage;
     private string? errorMessage;
     private string? successMessage;
 
+    private string SelectedEntryLabel => entryOptions.FirstOrDefault(x => x.EntryId == selectedEntryId)?.Label ?? "Selected entry";
+
+    private CarShowEntryDto? SelectedEntry => entries.FirstOrDefault(x => x.EntryId == selectedEntryId);
+
+    private bool CanEditSelectedEntry => UserSession.CanEditEntry(SelectedEntry);
+
+    private bool CanRunFinalScores => UserSession.IsAuthenticated && selectedShowId.HasValue;
+
     protected override async Task OnInitializedAsync()
     {
+        await LoadJudgeOptionsAsync();
+        SetDefaultJudgeName();
         await LoadShowsAsync();
     }
 
@@ -162,66 +402,172 @@
 
     private async Task OnShowChanged(object? _)
     {
-        errorMessage = null;
-        successMessage = null;
-
-        selectedEntryId = null;
-        entries = [];
-        entryOptions = [];
-        questionAnswers = [];
+        ResetMessages();
+        ResetShowState();
 
         if (!selectedShowId.HasValue)
         {
             return;
         }
 
-        isLoading = true;
-
         try
         {
-            var loadedEntries = await Client.Api.CarShowEntries.Show[selectedShowId.Value].GetAsync();
-            entries = loadedEntries?.ToList() ?? [];
-            entryOptions = entries
-                .Select(e => new EntryOption
-                {
-                    EntryId = e.EntryId,
-                    Label = BuildEntryLabel(e)
-                })
-                .Where(x => x.EntryId.HasValue)
-                .OrderBy(x => x.Label)
-                .ToList();
+            await RunBusyAsync("Loading show scoring details...", async () =>
+            {
+                entries = await LoadEntriesWithCarDetailsAsync(selectedShowId.Value);
+                entryOptions = entries
+                    .Where(x => x.EntryId.HasValue)
+                    .Select(x => new EntryOption
+                    {
+                        EntryId = x.EntryId,
+                        Label = BuildEntryLabel(x)
+                    })
+                    .OrderBy(x => x.Label)
+                    .ToList();
 
-            var questions = await Client.Api.CarShowScoringQuestions.Show[selectedShowId.Value].GetAsync();
-            questionAnswers = (questions ?? [])
-                .OrderBy(q => q.SortOrder ?? int.MaxValue)
-                .ThenBy(q => q.QuestionId ?? int.MaxValue)
-                .Select(q => new QuestionAnswerModel
-                {
-                    QuestionId = q.QuestionId,
-                    QuestionText = q.QuestionText ?? "Untitled question",
-                    AnswerType = q.AnswerType,
-                    Required = q.Required ?? false,
-                    MinScore = q.MinScore,
-                    MaxScore = q.MaxScore,
-                    IsNumeric = IsNumericType(q.AnswerType),
-                    IsBoolean = IsBooleanType(q.AnswerType)
-                })
-                .ToList();
+                scoringQuestions = (await Client.Api.CarShowScoringQuestions.Show[selectedShowId.Value].GetAsync() ?? [])
+                    .OrderBy(q => q.SortOrder ?? int.MaxValue)
+                    .ThenBy(q => q.QuestionId ?? int.MaxValue)
+                    .ToList();
+
+                questionLabelsById = scoringQuestions
+                    .Where(q => q.QuestionId.HasValue)
+                    .ToDictionary(q => q.QuestionId!.Value, q => q.QuestionText ?? $"Question {q.QuestionId}");
+
+                questionAnswers = BuildQuestionAnswerModels();
+                await LoadQuestionGroupLabelsAsync(selectedShowId.Value);
+                await LoadScoreboardAsyncCore();
+            });
         }
         catch (Exception ex)
         {
-            errorMessage = $"Unable to load entries/questions for selected show. {ex.Message}";
+            errorMessage = $"Unable to load scoring details for the selected show. {ex.Message}";
         }
-        finally
+    }
+
+    private async Task OnEntryChanged(object? _)
+    {
+        ResetMessages();
+
+        questionAnswers = BuildQuestionAnswerModels();
+        existingAnswersByQuestionId = [];
+        scorePreview = null;
+        selectedFinalScore = finalScores.FirstOrDefault(x => x.EntryId == selectedEntryId);
+
+        if (!selectedEntryId.HasValue)
         {
-            isLoading = false;
+            return;
+        }
+
+        await LoadEntryAsync(showBusy: true);
+    }
+
+    private async Task RefreshEntryAsync()
+    {
+        ResetMessages();
+
+        if (!selectedEntryId.HasValue)
+        {
+            return;
+        }
+
+        await LoadEntryAsync(showBusy: true);
+    }
+
+    private async Task RefreshScoreboardAsync()
+    {
+        ResetMessages();
+
+        if (!selectedShowId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            await RunBusyAsync("Refreshing persisted final scores...", LoadScoreboardAsyncCore);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to refresh the scoreboard. {ex.Message}";
+        }
+    }
+
+    private async Task LoadEntryAsync(bool showBusy)
+    {
+        if (!selectedEntryId.HasValue || !selectedShowId.HasValue)
+        {
+            return;
+        }
+
+        var loadTask = async () =>
+        {
+            questionAnswers = BuildQuestionAnswerModels();
+
+            var loadedAnswers = await Client.Api.CarShowAnswers.Entry[selectedEntryId.Value].GetAsync() ?? [];
+            existingAnswersByQuestionId = loadedAnswers
+                .Where(a => a.QuestionId.HasValue)
+                .GroupBy(a => a.QuestionId!.Value)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderByDescending(a => a.LastModified ?? a.AnsweredDate ?? DateTimeOffset.MinValue).First());
+
+            foreach (var question in questionAnswers.Where(x => x.QuestionId.HasValue))
+            {
+                if (!existingAnswersByQuestionId.TryGetValue(question.QuestionId!.Value, out var savedAnswer))
+                {
+                    continue;
+                }
+
+                question.AnswerId = savedAnswer.AnswerId;
+                question.NumericAnswer = savedAnswer.NumericAnswer;
+                question.BooleanAnswer = savedAnswer.BooleanAnswer;
+                question.TextAnswer = savedAnswer.TextAnswer;
+                question.Comments = savedAnswer.Comments;
+                question.AnsweredDate = savedAnswer.AnsweredDate;
+                question.LastModified = savedAnswer.LastModified;
+                question.SavedBy = savedAnswer.JudgedBy;
+            }
+
+            if (string.IsNullOrWhiteSpace(judgeName))
+            {
+                judgeName = loadedAnswers
+                    .OrderByDescending(x => x.LastModified ?? x.AnsweredDate ?? DateTimeOffset.MinValue)
+                    .Select(x => x.JudgedBy)
+                    .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
+
+                EnsureJudgeOption(judgeName);
+                SetDefaultJudgeName();
+            }
+
+            scorePreview = await Client.Api.CarShowScoreCalculations.Show[selectedShowId.Value].Entry[selectedEntryId.Value].GetAsync();
+            selectedFinalScore = finalScores.FirstOrDefault(x => x.EntryId == selectedEntryId);
+            if (selectedFinalScore is null)
+            {
+                try
+                {
+                    selectedFinalScore = await Client.Api.CarShowFinalScores.Show[selectedShowId.Value].Entry[selectedEntryId.Value].GetAsync();
+                }
+                catch (Microsoft.Kiota.Abstractions.ApiException)
+                {
+                    // No persisted final score exists for this entry yet — this is expected.
+                }
+            }
+        };
+
+        if (showBusy)
+        {
+            await RunBusyAsync("Loading entry answers and score preview...", loadTask);
+        }
+        else
+        {
+            await loadTask();
         }
     }
 
     private async Task SubmitScores()
     {
-        errorMessage = null;
-        successMessage = null;
+        ResetMessages();
 
         if (!selectedShowId.HasValue)
         {
@@ -235,9 +581,15 @@
             return;
         }
 
+        if (!CanEditSelectedEntry)
+        {
+            errorMessage = "You can only edit entries you submitted unless you are an admin.";
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(judgeName))
         {
-            errorMessage = "Please provide judge name.";
+            errorMessage = "Please select judge name.";
             return;
         }
 
@@ -248,41 +600,219 @@
             return;
         }
 
-        var answersToSubmit = questionAnswers
-            .Where(q => q.HasValue() && q.QuestionId.HasValue)
-            .Select(q => new CarShowAnswerDto
-            {
-                EntryId = selectedEntryId,
-                QuestionId = q.QuestionId,
-                NumericAnswer = q.NumericAnswer,
-                BooleanAnswer = q.IsBoolean ? q.BooleanAnswer : null,
-                TextAnswer = q.IsNumeric || q.IsBoolean ? null : q.TextAnswer,
-                Comments = q.Comments,
-                JudgedBy = judgeName,
-                AnsweredDate = DateTimeOffset.UtcNow,
-                LastModified = DateTimeOffset.UtcNow
-            })
-            .ToList();
-
-        if (!answersToSubmit.Any())
-        {
-            errorMessage = "No answers to submit.";
-            return;
-        }
+        var savedCount = 0;
+        var deletedCount = 0;
+        var now = DateTimeOffset.UtcNow;
 
         try
         {
-            foreach (var answer in answersToSubmit)
+            await RunBusyAsync("Saving scores...", async () =>
             {
-                await Client.Api.CarShowAnswers.PostAsync(answer);
-            }
+                foreach (var question in questionAnswers.Where(q => q.QuestionId.HasValue))
+                {
+                    var questionId = question.QuestionId!.Value;
+                    existingAnswersByQuestionId.TryGetValue(questionId, out var existingAnswer);
 
-            successMessage = $"Submitted {answersToSubmit.Count} answer(s).";
+                    if (question.HasValue())
+                    {
+                        var answerToSave = new CarShowAnswerDto
+                        {
+                            AnswerId = existingAnswer?.AnswerId,
+                            EntryId = selectedEntryId,
+                            QuestionId = question.QuestionId,
+                            NumericAnswer = question.IsNumeric ? question.NumericAnswer : null,
+                            BooleanAnswer = question.IsBoolean ? question.BooleanAnswer : null,
+                            TextAnswer = question.IsNumeric || question.IsBoolean ? null : NullIfWhiteSpace(question.TextAnswer),
+                            Comments = NullIfWhiteSpace(question.Comments),
+                            JudgedBy = judgeName?.Trim(),
+                            AnsweredDate = existingAnswer?.AnsweredDate ?? now,
+                            LastModified = now
+                        };
+
+                        if (existingAnswer?.AnswerId is int answerId)
+                        {
+                            await Client.Api.CarShowAnswers[answerId].PutAsync(answerToSave);
+                        }
+                        else
+                        {
+                            var createdAnswer = await Client.Api.CarShowAnswers.PostAsync(answerToSave);
+                            answerToSave.AnswerId = createdAnswer?.AnswerId;
+                        }
+
+                        savedCount++;
+                    }
+                    else if (existingAnswer?.AnswerId is int answerId)
+                    {
+                        await Client.Api.CarShowAnswers[answerId].DeleteAsync();
+                        deletedCount++;
+                    }
+                }
+
+                await LoadEntryAsync(showBusy: false);
+            });
+
+            successMessage = $"Saved {savedCount} answer(s) and removed {deletedCount} cleared answer(s). Run Final Scores to refresh the persisted scoreboard.";
         }
         catch (Exception ex)
         {
             errorMessage = $"Unable to submit scores. {ex.Message}";
         }
+    }
+
+    private async Task RunFinalScoresAsync()
+    {
+        ResetMessages();
+
+        if (!selectedShowId.HasValue)
+        {
+            errorMessage = "Please select a car show.";
+            return;
+        }
+
+        try
+        {
+            await RunBusyAsync("Running final score calculations...", async () =>
+            {
+                finalScores = (await Client.Api.CarShowScoreCalculations.Show[selectedShowId.Value].Run.PostAsync() ?? [])
+                    .OrderByDescending(x => x.Score ?? double.MinValue)
+                    .ThenBy(x => x.EntryId ?? int.MaxValue)
+                    .ToList();
+
+                BuildScoreboardRows();
+                selectedFinalScore = finalScores.FirstOrDefault(x => x.EntryId == selectedEntryId);
+
+                if (selectedEntryId.HasValue)
+                {
+                    scorePreview = await Client.Api.CarShowScoreCalculations.Show[selectedShowId.Value].Entry[selectedEntryId.Value].GetAsync();
+                }
+            });
+
+            successMessage = $"Calculated and persisted {finalScores.Count} final score row(s).";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to run final scores. {ex.Message}";
+        }
+    }
+
+    private async Task LoadScoreboardAsyncCore()
+    {
+        if (!selectedShowId.HasValue)
+        {
+            finalScores = [];
+            scoreboardRows = [];
+            selectedFinalScore = null;
+            return;
+        }
+
+        finalScores = (await Client.Api.CarShowFinalScores.Show[selectedShowId.Value].GetAsync() ?? [])
+            .OrderByDescending(x => x.Score ?? double.MinValue)
+            .ThenBy(x => x.EntryId ?? int.MaxValue)
+            .ToList();
+
+        BuildScoreboardRows();
+        selectedFinalScore = finalScores.FirstOrDefault(x => x.EntryId == selectedEntryId);
+    }
+
+    private async Task LoadQuestionGroupLabelsAsync(int showId)
+    {
+        var groups = await Client.Api.CarShowQuestionCalculationGroups.Show[showId].GetAsync() ?? [];
+        questionGroupLabelsById = groups
+            .Where(x => x.QuestionCalculationGroupId.HasValue)
+            .ToDictionary(
+                x => x.QuestionCalculationGroupId!.Value,
+                x => string.IsNullOrWhiteSpace(x.GroupName) ? $"Group {x.QuestionCalculationGroupId}" : x.GroupName!);
+    }
+
+    private void BuildScoreboardRows()
+    {
+        scoreboardRows = finalScores
+            .OrderByDescending(x => x.Score ?? double.MinValue)
+            .ThenBy(x => x.EntryId ?? int.MaxValue)
+            .Select((score, index) => new ScoreboardRow
+            {
+                Rank = index + 1,
+                EntryLabel = BuildScoreboardEntryLabel(score),
+                Vin = score.Vin ?? "-",
+                Score = score.Score,
+                CalculatedDate = score.CalculatedDate,
+                CalculationSummary = score.CalculationSummary ?? "-"
+            })
+            .ToList();
+    }
+
+    private List<QuestionAnswerModel> BuildQuestionAnswerModels()
+    {
+        return scoringQuestions
+            .Select(q => new QuestionAnswerModel
+            {
+                QuestionId = q.QuestionId,
+                QuestionText = q.QuestionText ?? "Untitled question",
+                AnswerType = q.AnswerType,
+                Required = q.Required ?? false,
+                MinScore = q.MinScore,
+                MaxScore = q.MaxScore,
+                IsNumeric = IsNumericType(q.AnswerType),
+                IsBoolean = IsBooleanType(q.AnswerType)
+            })
+            .ToList();
+    }
+
+    private async Task<List<CarShowEntryDto>> LoadEntriesWithCarDetailsAsync(int showId)
+    {
+        var showEntries = (await Client.Api.CarShowEntries.Show[showId].GetAsync())?.ToList() ?? [];
+
+        foreach (var entry in showEntries.Where(x => x.CarDetail is null && !string.IsNullOrWhiteSpace(x.Vin)))
+        {
+            try
+            {
+                entry.CarDetail = await Client.Api.CarDetails[entry.Vin!].GetAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        return showEntries;
+    }
+
+    private async Task RunBusyAsync(string message, Func<Task> action)
+    {
+        isBusy = true;
+        busyMessage = message;
+
+        try
+        {
+            await action();
+        }
+        finally
+        {
+            isBusy = false;
+            busyMessage = null;
+        }
+    }
+
+    private void ResetShowState()
+    {
+        entries = [];
+        entryOptions = [];
+        scoringQuestions = [];
+        questionAnswers = [];
+        finalScores = [];
+        scoreboardRows = [];
+        existingAnswersByQuestionId = [];
+        questionLabelsById = [];
+        questionGroupLabelsById = [];
+        scorePreview = null;
+        selectedFinalScore = null;
+        selectedEntryId = null;
+        judgeName = null;
+    }
+
+    private void ResetMessages()
+    {
+        errorMessage = null;
+        successMessage = null;
     }
 
     private static string BuildEntryLabel(CarShowEntryDto entry)
@@ -294,6 +824,34 @@
         var vin = string.IsNullOrWhiteSpace(entry.Vin) ? "-" : entry.Vin;
 
         return $"#{entryNumber} - {year} {make} {model} ({vin})";
+    }
+
+    private string BuildScoreboardEntryLabel(CarShowFinalScoreDto score)
+    {
+        if (score.EntryId.HasValue)
+        {
+            var entryOption = entryOptions.FirstOrDefault(x => x.EntryId == score.EntryId);
+            if (entryOption is not null)
+            {
+                return entryOption.Label;
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(score.Vin) ? "Unknown entry" : score.Vin!;
+    }
+
+    private string GetQuestionLabel(int? questionId)
+    {
+        return questionId.HasValue && questionLabelsById.TryGetValue(questionId.Value, out var label)
+            ? label
+            : $"Question {questionId?.ToString() ?? "-"}";
+    }
+
+    private string GetQuestionGroupLabel(int? questionCalculationGroupId)
+    {
+        return questionCalculationGroupId.HasValue && questionGroupLabelsById.TryGetValue(questionCalculationGroupId.Value, out var label)
+            ? label
+            : $"Group {questionCalculationGroupId?.ToString() ?? "-"}";
     }
 
     private static bool IsNumericType(string? answerType)
@@ -310,12 +868,151 @@
         return normalized.Contains("bool") || normalized.Contains("yes") || normalized.Contains("no") || normalized.Contains("switch") || normalized.Contains("checkbox");
     }
 
+    private static decimal? ToNullableDecimal(int? value)
+    {
+        return value.HasValue ? value.Value : null;
+    }
+
     private static string DisplayRange(int? min, int? max)
     {
         if (!min.HasValue && !max.HasValue) return "Any";
         if (!min.HasValue) return $"<= {max}";
         if (!max.HasValue) return $">= {min}";
         return $"{min} - {max}";
+    }
+
+    private static string Display(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "-" : value;
+    }
+
+    private static string DisplayScore(double? value)
+    {
+        return value?.ToString("0.##") ?? "-";
+    }
+
+    private static string DisplayDateTime(DateTimeOffset? value)
+    {
+        return value?.ToLocalTime().ToString("MMM dd, yyyy h:mm tt") ?? "-";
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static BadgeStyle GetOperationBadgeStyle(string? operationType)
+    {
+        return NormalizeOperation(operationType) switch
+        {
+            "SUM" => BadgeStyle.Primary,
+            "AVERAGE" => BadgeStyle.Info,
+            "MULTIPLY" => BadgeStyle.Success,
+            "DIVIDE" => BadgeStyle.Warning,
+            "SUBTRACT" => BadgeStyle.Warning,
+            "MIN" => BadgeStyle.Secondary,
+            "MAX" => BadgeStyle.Secondary,
+            _ => BadgeStyle.Light
+        };
+    }
+
+    private BadgeStyle GetAnswerTypeBadgeStyle(QuestionAnswerModel question)
+    {
+        if (question.IsBoolean)
+        {
+            return BadgeStyle.Info;
+        }
+
+        if (question.IsNumeric)
+        {
+            return BadgeStyle.Primary;
+        }
+
+        return BadgeStyle.Secondary;
+    }
+
+    private static string NormalizeOperation(string? operationType)
+    {
+        if (string.IsNullOrWhiteSpace(operationType))
+        {
+            return string.Empty;
+        }
+
+        return operationType.Trim().ToUpperInvariant();
+    }
+
+    private async Task LoadJudgeOptionsAsync()
+    {
+        try
+        {
+            var users = await Client.Api.AppUsers.GetAsync() ?? [];
+            judgeOptions = users
+                .Where(x => x.IsActive != false)
+                .Select(x => new JudgeOption { DisplayName = GetUserDisplayName(x) })
+                .Where(x => !string.IsNullOrWhiteSpace(x.DisplayName))
+                .GroupBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .OrderBy(x => x.DisplayName)
+                .ToList();
+
+            EnsureJudgeOption(UserSession.EffectiveDisplayName);
+        }
+        catch
+        {
+            judgeOptions = [];
+            EnsureJudgeOption(UserSession.EffectiveDisplayName);
+        }
+    }
+
+    private void SetDefaultJudgeName()
+    {
+        if (!string.IsNullOrWhiteSpace(judgeName))
+        {
+            return;
+        }
+
+        var preferred = UserSession.EffectiveDisplayName;
+        if (string.IsNullOrWhiteSpace(preferred))
+        {
+            return;
+        }
+
+        EnsureJudgeOption(preferred);
+        judgeName = judgeOptions
+            .FirstOrDefault(x => string.Equals(x.DisplayName, preferred, StringComparison.OrdinalIgnoreCase))
+            ?.DisplayName;
+    }
+
+    private void EnsureJudgeOption(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        if (judgeOptions.Any(x => string.Equals(x.DisplayName, value, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        judgeOptions.Add(new JudgeOption { DisplayName = value.Trim() });
+        judgeOptions = judgeOptions.OrderBy(x => x.DisplayName).ToList();
+    }
+
+    private static string GetUserDisplayName(AppUserDto? user)
+    {
+        if (!string.IsNullOrWhiteSpace(user?.DisplayName))
+        {
+            return user.DisplayName!;
+        }
+
+        var fullName = string.Join(' ', new[] { user?.FirstName, user?.LastName }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
+        if (!string.IsNullOrWhiteSpace(fullName))
+        {
+            return fullName;
+        }
+
+        return user?.Username ?? string.Empty;
     }
 
     private sealed class EntryOption
@@ -330,6 +1027,11 @@
         public bool? Value { get; set; }
     }
 
+    private sealed class JudgeOption
+    {
+        public string DisplayName { get; set; } = string.Empty;
+    }
+
     private sealed class QuestionAnswerModel
     {
         public int? QuestionId { get; set; }
@@ -338,6 +1040,10 @@
         public bool Required { get; set; }
         public int? MinScore { get; set; }
         public int? MaxScore { get; set; }
+        public int? AnswerId { get; set; }
+        public DateTimeOffset? AnsweredDate { get; set; }
+        public DateTimeOffset? LastModified { get; set; }
+        public string? SavedBy { get; set; }
 
         public bool IsNumeric { get; set; }
         public bool IsBoolean { get; set; }
@@ -346,6 +1052,8 @@
         public bool? BooleanAnswer { get; set; }
         public string? TextAnswer { get; set; }
         public string? Comments { get; set; }
+
+        public string DisplayAnswerType => IsBoolean ? "Boolean" : IsNumeric ? "Numeric" : string.IsNullOrWhiteSpace(AnswerType) ? "Text" : AnswerType!;
 
         public bool HasValue()
         {
@@ -361,5 +1069,15 @@
 
             return !string.IsNullOrWhiteSpace(TextAnswer);
         }
+    }
+
+    private sealed class ScoreboardRow
+    {
+        public int Rank { get; set; }
+        public string EntryLabel { get; set; } = string.Empty;
+        public string Vin { get; set; } = string.Empty;
+        public double? Score { get; set; }
+        public DateTimeOffset? CalculatedDate { get; set; }
+        public string CalculationSummary { get; set; } = string.Empty;
     }
 }

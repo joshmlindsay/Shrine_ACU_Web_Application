@@ -1,6 +1,7 @@
 @page "/fetch-login"
 @rendermode InteractiveServer
 @inject NavigationManager Navigation
+@inject UserSessionService UserSession
 
 <PageTitle>Login</PageTitle>
 
@@ -9,28 +10,63 @@
         <RadzenCard>
             <RadzenStack Gap="1rem">
                 <RadzenText TextStyle="TextStyle.H4">Login</RadzenText>
-                <RadzenText TextStyle="TextStyle.Body2">Connection is intentionally not wired yet.</RadzenText>
 
-                <RadzenFormField Text="Username" Variant="Variant.Outlined">
-                    <RadzenTextBox Name="Username" @bind-Value="username" Style="width:100%;" />
-                </RadzenFormField>
+                @if (!string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+                }
 
-                <RadzenFormField Text="Password" Variant="Variant.Outlined">
-                    <RadzenPassword Name="Password" @bind-Value="password" Style="width:100%;" />
-                </RadzenFormField>
+                @if (!UserSession.IsAuthenticated)
+                {
+                    <RadzenFormField Text="Username" Variant="Variant.Outlined">
+                        <RadzenTextBox Name="Username" @bind-Value="username" Style="width:100%;" />
+                    </RadzenFormField>
 
-                <RadzenButton Text="Login" Icon="login" ButtonStyle="ButtonStyle.Primary" Click="GoToCarShows" Style="width:100%;" />
+                    <RadzenFormField Text="Password" Variant="Variant.Outlined">
+                        <RadzenPassword Name="Password" @bind-Value="password" Style="width:100%;" />
+                    </RadzenFormField>
+
+                    <RadzenButton Text="Login" Icon="login" ButtonStyle="ButtonStyle.Primary" Disabled="isBusy" Click="HandleLoginAsync" Style="width:100%;" />
+                }
             </RadzenStack>
         </RadzenCard>
     </RadzenColumn>
 </RadzenRow>
 
 @code {
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
     private string? username;
     private string? password;
+    private bool isBusy;
+    private string? errorMessage;
 
-    private void GoToCarShows()
+    private async Task HandleLoginAsync()
     {
-        Navigation.NavigateTo("/fetch-carshows");
+        errorMessage = null;
+        isBusy = true;
+
+        try
+        {
+            var result = await UserSession.LoginAsync(username, password);
+            if (!result.Succeeded)
+            {
+                errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(ReturnUrl) && Uri.IsWellFormedUriString(ReturnUrl, UriKind.Relative))
+            {
+                Navigation.NavigateTo(ReturnUrl);
+                return;
+            }
+
+            Navigation.NavigateTo("/");
+        }
+        finally
+        {
+            isBusy = false;
+        }
     }
 }

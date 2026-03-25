@@ -42,6 +42,8 @@ namespace AcuCarShowClient.Models
         public double? NumericAnswer { get; set; }
         /// <summary>The questionId property</summary>
         public int? QuestionId { get; set; }
+        /// <summary>The submittedByUserId property</summary>
+        public int? SubmittedByUserId { get; set; }
         /// <summary>The textAnswer property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
@@ -77,6 +79,7 @@ namespace AcuCarShowClient.Models
                 { "lastModified", n => { LastModified = n.GetDateTimeOffsetValue(); } },
                 { "numericAnswer", n => { NumericAnswer = n.GetDoubleValue(); } },
                 { "questionId", n => { QuestionId = n.GetIntValue(); } },
+                { "submittedByUserId", n => { SubmittedByUserId = n.GetIntValue(); } },
                 { "textAnswer", n => { TextAnswer = n.GetStringValue(); } },
             };
         }
@@ -96,6 +99,7 @@ namespace AcuCarShowClient.Models
             writer.WriteDateTimeOffsetValue("lastModified", LastModified);
             writer.WriteDoubleValue("numericAnswer", NumericAnswer);
             writer.WriteIntValue("questionId", QuestionId);
+            writer.WriteIntValue("submittedByUserId", SubmittedByUserId);
             writer.WriteStringValue("textAnswer", TextAnswer);
         }
     }

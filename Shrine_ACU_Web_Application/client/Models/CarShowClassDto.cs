@@ -24,6 +24,8 @@ namespace AcuCarShowClient.Models
 #else
         public string ClassName { get; set; }
 #endif
+        /// <summary>The createdByUserId property</summary>
+        public int? CreatedByUserId { get; set; }
         /// <summary>The customCriteria property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
@@ -75,6 +77,7 @@ namespace AcuCarShowClient.Models
                 { "active", n => { Active = n.GetBoolValue(); } },
                 { "classId", n => { ClassId = n.GetIntValue(); } },
                 { "className", n => { ClassName = n.GetStringValue(); } },
+                { "createdByUserId", n => { CreatedByUserId = n.GetIntValue(); } },
                 { "customCriteria", n => { CustomCriteria = n.GetStringValue(); } },
                 { "description", n => { Description = n.GetStringValue(); } },
                 { "displayOrder", n => { DisplayOrder = n.GetIntValue(); } },
@@ -96,6 +99,7 @@ namespace AcuCarShowClient.Models
             writer.WriteBoolValue("active", Active);
             writer.WriteIntValue("classId", ClassId);
             writer.WriteStringValue("className", ClassName);
+            writer.WriteIntValue("createdByUserId", CreatedByUserId);
             writer.WriteStringValue("customCriteria", CustomCriteria);
             writer.WriteStringValue("description", Description);
             writer.WriteIntValue("displayOrder", DisplayOrder);

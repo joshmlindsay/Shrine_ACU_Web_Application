@@ -22,6 +22,8 @@ namespace AcuCarShowClient.Models
 #else
         public string Category { get; set; }
 #endif
+        /// <summary>The createdByUserId property</summary>
+        public int? CreatedByUserId { get; set; }
         /// <summary>The description property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
@@ -66,6 +68,7 @@ namespace AcuCarShowClient.Models
             {
                 { "active", n => { Active = n.GetBoolValue(); } },
                 { "category", n => { Category = n.GetStringValue(); } },
+                { "createdByUserId", n => { CreatedByUserId = n.GetIntValue(); } },
                 { "description", n => { Description = n.GetStringValue(); } },
                 { "endYear", n => { EndYear = n.GetIntValue(); } },
                 { "optionId", n => { OptionId = n.GetIntValue(); } },
@@ -83,6 +86,7 @@ namespace AcuCarShowClient.Models
             if(ReferenceEquals(writer, null)) throw new ArgumentNullException(nameof(writer));
             writer.WriteBoolValue("active", Active);
             writer.WriteStringValue("category", Category);
+            writer.WriteIntValue("createdByUserId", CreatedByUserId);
             writer.WriteStringValue("description", Description);
             writer.WriteIntValue("endYear", EndYear);
             writer.WriteIntValue("optionId", OptionId);

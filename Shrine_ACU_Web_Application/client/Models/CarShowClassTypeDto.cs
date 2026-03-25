@@ -24,6 +24,8 @@ namespace AcuCarShowClient.Models
 #else
         public string ClassificationMethod { get; set; }
 #endif
+        /// <summary>The createdByUserId property</summary>
+        public int? CreatedByUserId { get; set; }
         /// <summary>The description property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
@@ -73,6 +75,7 @@ namespace AcuCarShowClient.Models
                 { "active", n => { Active = n.GetBoolValue(); } },
                 { "allowMultiple", n => { AllowMultiple = n.GetBoolValue(); } },
                 { "classificationMethod", n => { ClassificationMethod = n.GetStringValue(); } },
+                { "createdByUserId", n => { CreatedByUserId = n.GetIntValue(); } },
                 { "description", n => { Description = n.GetStringValue(); } },
                 { "displayOrder", n => { DisplayOrder = n.GetIntValue(); } },
                 { "options", n => { Options = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowClassOptionDto>(global::AcuCarShowClient.Models.CarShowClassOptionDto.CreateFromDiscriminatorValue)?.AsList(); } },
@@ -90,6 +93,7 @@ namespace AcuCarShowClient.Models
             writer.WriteBoolValue("active", Active);
             writer.WriteBoolValue("allowMultiple", AllowMultiple);
             writer.WriteStringValue("classificationMethod", ClassificationMethod);
+            writer.WriteIntValue("createdByUserId", CreatedByUserId);
             writer.WriteStringValue("description", Description);
             writer.WriteIntValue("displayOrder", DisplayOrder);
             writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowClassOptionDto>("options", Options);

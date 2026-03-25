@@ -1,0 +1,45 @@
+@page "/profile"
+@rendermode InteractiveServer
+
+@inject UserSessionService UserSession
+@inject NavigationManager Navigation
+
+<PageTitle>Profile</PageTitle>
+
+@if (!UserSession.IsAuthenticated)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in to view your profile.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1rem">
+        <RadzenText TextStyle="TextStyle.H4">Profile</RadzenText>
+
+        <RadzenCard>
+            <RadzenStack Gap="0.5rem">
+                <RadzenText><b>Display Name:</b> @Display(UserSession.CurrentUser?.DisplayName)</RadzenText>
+                <RadzenText><b>Username:</b> @Display(UserSession.CurrentUser?.Username)</RadzenText>
+                <RadzenText><b>First Name:</b> @Display(UserSession.CurrentUser?.FirstName)</RadzenText>
+                <RadzenText><b>Last Name:</b> @Display(UserSession.CurrentUser?.LastName)</RadzenText>
+                <RadzenText><b>Email:</b> @Display(UserSession.CurrentUser?.Email)</RadzenText>
+                <RadzenText><b>User ID:</b> @Display(UserSession.CurrentUser?.UserId)</RadzenText>
+                <RadzenText><b>Role:</b> @(UserSession.IsAdmin ? "Admin" : "User")</RadzenText>
+                <RadzenText><b>Acting As:</b> @UserSession.EffectiveDisplayName</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenStack>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        if (!UserSession.IsAuthenticated)
+        {
+            Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString("/profile")}", replace: true);
+        }
+    }
+
+    private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private static string Display(int? value) => value?.ToString() ?? "-";
+}

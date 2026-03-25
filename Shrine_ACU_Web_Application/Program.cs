@@ -2,6 +2,7 @@ using Microsoft.Kiota.Abstractions.Authentication;
 using Microsoft.Kiota.Http.HttpClientLibrary;
 using Radzen;
 using Shrine_ACU_Web_Application.Components;
+using Shrine_ACU_Web_Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,6 +36,8 @@ builder.Services.AddScoped<AcuCarShowClient.AcuCarShowClient>((sp) =>
 
     return new AcuCarShowClient.AcuCarShowClient(requestAdapter);
 });
+
+builder.Services.AddScoped<UserSessionService>();
 
 var app = builder.Build();
 

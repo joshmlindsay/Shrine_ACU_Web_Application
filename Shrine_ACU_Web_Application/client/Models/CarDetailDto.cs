@@ -150,6 +150,8 @@ namespace AcuCarShowClient.Models
 #else
         public string Owner { get; set; }
 #endif
+        /// <summary>The ownerUserId property</summary>
+        public int? OwnerUserId { get; set; }
         /// <summary>The paintCode property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
@@ -282,6 +284,7 @@ namespace AcuCarShowClient.Models
                 { "originalTransmission", n => { OriginalTransmission = n.GetBoolValue(); } },
                 { "originality", n => { Originality = n.GetStringValue(); } },
                 { "owner", n => { Owner = n.GetStringValue(); } },
+                { "ownerUserId", n => { OwnerUserId = n.GetIntValue(); } },
                 { "paintCode", n => { PaintCode = n.GetStringValue(); } },
                 { "price", n => { Price = n.GetDoubleValue(); } },
                 { "provenance", n => { Provenance = n.GetStringValue(); } },
@@ -330,6 +333,7 @@ namespace AcuCarShowClient.Models
             writer.WriteBoolValue("originalPaint", OriginalPaint);
             writer.WriteBoolValue("originalTransmission", OriginalTransmission);
             writer.WriteStringValue("owner", Owner);
+            writer.WriteIntValue("ownerUserId", OwnerUserId);
             writer.WriteStringValue("paintCode", PaintCode);
             writer.WriteDoubleValue("price", Price);
             writer.WriteStringValue("provenance", Provenance);

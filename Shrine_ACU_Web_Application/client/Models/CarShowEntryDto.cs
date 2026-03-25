@@ -42,6 +42,14 @@ namespace AcuCarShowClient.Models
         public int? EntryId { get; set; }
         /// <summary>The entryNumber property</summary>
         public int? EntryNumber { get; set; }
+        /// <summary>The finalScores property</summary>
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+#nullable enable
+        public List<global::AcuCarShowClient.Models.CarShowFinalScoreDto>? FinalScores { get; set; }
+#nullable restore
+#else
+        public List<global::AcuCarShowClient.Models.CarShowFinalScoreDto> FinalScores { get; set; }
+#endif
         /// <summary>The judgeScore property</summary>
         public double? JudgeScore { get; set; }
         /// <summary>The notes property</summary>
@@ -72,6 +80,8 @@ namespace AcuCarShowClient.Models
 #else
         public string Status { get; set; }
 #endif
+        /// <summary>The submittedByUserId property</summary>
+        public int? SubmittedByUserId { get; set; }
         /// <summary>The vin property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
@@ -104,12 +114,14 @@ namespace AcuCarShowClient.Models
                 { "classId", n => { ClassId = n.GetIntValue(); } },
                 { "entryId", n => { EntryId = n.GetIntValue(); } },
                 { "entryNumber", n => { EntryNumber = n.GetIntValue(); } },
+                { "finalScores", n => { FinalScores = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowFinalScoreDto>(global::AcuCarShowClient.Models.CarShowFinalScoreDto.CreateFromDiscriminatorValue)?.AsList(); } },
                 { "judgeScore", n => { JudgeScore = n.GetDoubleValue(); } },
                 { "notes", n => { Notes = n.GetStringValue(); } },
                 { "placement", n => { Placement = n.GetStringValue(); } },
                 { "registrationDate", n => { RegistrationDate = n.GetDateTimeOffsetValue(); } },
                 { "showId", n => { ShowId = n.GetIntValue(); } },
                 { "status", n => { Status = n.GetStringValue(); } },
+                { "submittedByUserId", n => { SubmittedByUserId = n.GetIntValue(); } },
                 { "vin", n => { Vin = n.GetStringValue(); } },
             };
         }
@@ -126,12 +138,14 @@ namespace AcuCarShowClient.Models
             writer.WriteIntValue("classId", ClassId);
             writer.WriteIntValue("entryId", EntryId);
             writer.WriteIntValue("entryNumber", EntryNumber);
+            writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowFinalScoreDto>("finalScores", FinalScores);
             writer.WriteDoubleValue("judgeScore", JudgeScore);
             writer.WriteStringValue("notes", Notes);
             writer.WriteStringValue("placement", Placement);
             writer.WriteDateTimeOffsetValue("registrationDate", RegistrationDate);
             writer.WriteIntValue("showId", ShowId);
             writer.WriteStringValue("status", Status);
+            writer.WriteIntValue("submittedByUserId", SubmittedByUserId);
             writer.WriteStringValue("vin", Vin);
         }
     }

@@ -38,6 +38,8 @@ namespace AcuCarShowClient.Models
 #else
         public string CreatedBy { get; set; }
 #endif
+        /// <summary>The createdByUserId property</summary>
+        public int? CreatedByUserId { get; set; }
         /// <summary>The createdDate property</summary>
         public DateTimeOffset? CreatedDate { get; set; }
         /// <summary>The description property</summary>
@@ -60,6 +62,22 @@ namespace AcuCarShowClient.Models
 #endif
         /// <summary>The eventDate property</summary>
         public DateTimeOffset? EventDate { get; set; }
+        /// <summary>The finalScores property</summary>
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+#nullable enable
+        public List<global::AcuCarShowClient.Models.CarShowFinalScoreDto>? FinalScores { get; set; }
+#nullable restore
+#else
+        public List<global::AcuCarShowClient.Models.CarShowFinalScoreDto> FinalScores { get; set; }
+#endif
+        /// <summary>The groupCalculations property</summary>
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+#nullable enable
+        public List<global::AcuCarShowClient.Models.CarShowGroupCalculationDto>? GroupCalculations { get; set; }
+#nullable restore
+#else
+        public List<global::AcuCarShowClient.Models.CarShowGroupCalculationDto> GroupCalculations { get; set; }
+#endif
         /// <summary>The judgeType property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
@@ -83,6 +101,14 @@ namespace AcuCarShowClient.Models
 #nullable restore
 #else
         public string Name { get; set; }
+#endif
+        /// <summary>The questionCalculationGroups property</summary>
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+#nullable enable
+        public List<global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupDto>? QuestionCalculationGroups { get; set; }
+#nullable restore
+#else
+        public List<global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupDto> QuestionCalculationGroups { get; set; }
 #endif
         /// <summary>The scoringFormat property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
@@ -126,14 +152,18 @@ namespace AcuCarShowClient.Models
                 { "category", n => { Category = n.GetStringValue(); } },
                 { "classes", n => { Classes = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowClassDto>(global::AcuCarShowClient.Models.CarShowClassDto.CreateFromDiscriminatorValue)?.AsList(); } },
                 { "createdBy", n => { CreatedBy = n.GetStringValue(); } },
+                { "createdByUserId", n => { CreatedByUserId = n.GetIntValue(); } },
                 { "createdDate", n => { CreatedDate = n.GetDateTimeOffsetValue(); } },
                 { "description", n => { Description = n.GetStringValue(); } },
                 { "endDate", n => { EndDate = n.GetDateTimeOffsetValue(); } },
                 { "entries", n => { Entries = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowEntryDto>(global::AcuCarShowClient.Models.CarShowEntryDto.CreateFromDiscriminatorValue)?.AsList(); } },
                 { "eventDate", n => { EventDate = n.GetDateTimeOffsetValue(); } },
+                { "finalScores", n => { FinalScores = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowFinalScoreDto>(global::AcuCarShowClient.Models.CarShowFinalScoreDto.CreateFromDiscriminatorValue)?.AsList(); } },
+                { "groupCalculations", n => { GroupCalculations = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowGroupCalculationDto>(global::AcuCarShowClient.Models.CarShowGroupCalculationDto.CreateFromDiscriminatorValue)?.AsList(); } },
                 { "judgeType", n => { JudgeType = n.GetStringValue(); } },
                 { "location", n => { Location = n.GetStringValue(); } },
                 { "name", n => { Name = n.GetStringValue(); } },
+                { "questionCalculationGroups", n => { QuestionCalculationGroups = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupDto>(global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupDto.CreateFromDiscriminatorValue)?.AsList(); } },
                 { "scoringFormat", n => { ScoringFormat = n.GetStringValue(); } },
                 { "scoringQuestions", n => { ScoringQuestions = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowScoringQuestionDto>(global::AcuCarShowClient.Models.CarShowScoringQuestionDto.CreateFromDiscriminatorValue)?.AsList(); } },
                 { "showId", n => { ShowId = n.GetIntValue(); } },
@@ -151,14 +181,18 @@ namespace AcuCarShowClient.Models
             writer.WriteStringValue("category", Category);
             writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowClassDto>("classes", Classes);
             writer.WriteStringValue("createdBy", CreatedBy);
+            writer.WriteIntValue("createdByUserId", CreatedByUserId);
             writer.WriteDateTimeOffsetValue("createdDate", CreatedDate);
             writer.WriteStringValue("description", Description);
             writer.WriteDateTimeOffsetValue("endDate", EndDate);
             writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowEntryDto>("entries", Entries);
             writer.WriteDateTimeOffsetValue("eventDate", EventDate);
+            writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowFinalScoreDto>("finalScores", FinalScores);
+            writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowGroupCalculationDto>("groupCalculations", GroupCalculations);
             writer.WriteStringValue("judgeType", JudgeType);
             writer.WriteStringValue("location", Location);
             writer.WriteStringValue("name", Name);
+            writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupDto>("questionCalculationGroups", QuestionCalculationGroups);
             writer.WriteStringValue("scoringFormat", ScoringFormat);
             writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowScoringQuestionDto>("scoringQuestions", ScoringQuestions);
             writer.WriteIntValue("showId", ShowId);

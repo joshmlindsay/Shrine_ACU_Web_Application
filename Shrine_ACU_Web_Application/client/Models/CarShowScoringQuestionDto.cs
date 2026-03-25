@@ -30,6 +30,14 @@ namespace AcuCarShowClient.Models
 #else
         public string AnswerType { get; set; }
 #endif
+        /// <summary>The calculationGroups property</summary>
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
+#nullable enable
+        public List<global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupQuestionDto>? CalculationGroups { get; set; }
+#nullable restore
+#else
+        public List<global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupQuestionDto> CalculationGroups { get; set; }
+#endif
         /// <summary>The category property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
@@ -38,6 +46,8 @@ namespace AcuCarShowClient.Models
 #else
         public string Category { get; set; }
 #endif
+        /// <summary>The createdByUserId property</summary>
+        public int? CreatedByUserId { get; set; }
         /// <summary>The createdDate property</summary>
         public DateTimeOffset? CreatedDate { get; set; }
         /// <summary>The description property</summary>
@@ -97,7 +107,9 @@ namespace AcuCarShowClient.Models
                 { "active", n => { Active = n.GetBoolValue(); } },
                 { "answerType", n => { AnswerType = n.GetStringValue(); } },
                 { "answers", n => { Answers = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowAnswerDto>(global::AcuCarShowClient.Models.CarShowAnswerDto.CreateFromDiscriminatorValue)?.AsList(); } },
+                { "calculationGroups", n => { CalculationGroups = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupQuestionDto>(global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupQuestionDto.CreateFromDiscriminatorValue)?.AsList(); } },
                 { "category", n => { Category = n.GetStringValue(); } },
+                { "createdByUserId", n => { CreatedByUserId = n.GetIntValue(); } },
                 { "createdDate", n => { CreatedDate = n.GetDateTimeOffsetValue(); } },
                 { "description", n => { Description = n.GetStringValue(); } },
                 { "judgeNotes", n => { JudgeNotes = n.GetStringValue(); } },
@@ -120,7 +132,9 @@ namespace AcuCarShowClient.Models
             writer.WriteBoolValue("active", Active);
             writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowAnswerDto>("answers", Answers);
             writer.WriteStringValue("answerType", AnswerType);
+            writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowQuestionCalculationGroupQuestionDto>("calculationGroups", CalculationGroups);
             writer.WriteStringValue("category", Category);
+            writer.WriteIntValue("createdByUserId", CreatedByUserId);
             writer.WriteDateTimeOffsetValue("createdDate", CreatedDate);
             writer.WriteStringValue("description", Description);
             writer.WriteStringValue("judgeNotes", JudgeNotes);

@@ -1,7 +1,19 @@
 ﻿@page "/"
 
+@rendermode InteractiveServer
+
+@inject UserSessionService UserSession
+
 <PageTitle>Home</PageTitle>
 
-<h1>Hello, world!</h1>
-
-Welcome to your new app.
+<RadzenStack Gap="1rem">
+    <RadzenText TextStyle="TextStyle.H4">Shrine ACU Portal</RadzenText>
+    @if (!UserSession.IsAuthenticated)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in to use this portal. Click the Login link in the navigation menu.</RadzenAlert>
+    }
+    else
+    {
+        <RadzenText>Hello World</RadzenText>
+    }
+</RadzenStack>

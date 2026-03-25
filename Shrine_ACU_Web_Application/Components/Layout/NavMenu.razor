@@ -1,4 +1,6 @@
-﻿File: Shrine_ACU_Web_Application\Components\Layout\NavMenu.razor
+﻿@inject UserSessionService UserSession
+@implements IDisposable
+
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">Shrine ACU Portal</a>
@@ -15,29 +17,48 @@
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="fetch-login">
-                <span class="bi bi-person-circle" aria-hidden="true"></span> Login
-            </NavLink>
-        </div>
+        @if (!UserSession.IsAuthenticated)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="fetch-login">
+                    <span class="bi bi-person-circle" aria-hidden="true"></span> Login
+                </NavLink>
+            </div>
+        }
+        else
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="fetch-carshows">
+                    <span class="bi bi-car-front" aria-hidden="true"></span> Car Shows
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="fetch-carshows">
-                <span class="bi bi-car-front" aria-hidden="true"></span> Car Shows
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="fetch-signup">
+                    <span class="bi bi-person-plus" aria-hidden="true"></span> Signup
+                </NavLink>
+            </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="fetch-signup">
-                <span class="bi bi-person-plus" aria-hidden="true"></span> Signup
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="fetch-scoring">
-                <span class="bi bi-clipboard-check" aria-hidden="true"></span> Scoring
-            </NavLink>
-        </div>
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="fetch-scoring">
+                    <span class="bi bi-clipboard-check" aria-hidden="true"></span> Scoring
+                </NavLink>
+            </div>
+        }
     </nav>
 </div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        UserSession.StateChanged += HandleSessionChanged;
+    }
+
+    private void HandleSessionChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        UserSession.StateChanged -= HandleSessionChanged;
+    }
+}
 

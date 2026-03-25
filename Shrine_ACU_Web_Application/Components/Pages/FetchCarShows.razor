@@ -2,82 +2,91 @@
 @rendermode InteractiveServer
 @inject AcuCarShowClient Client
 @inject DialogService DialogService
+@inject NavigationManager Navigation
+@inject UserSessionService UserSession
 
 <PageTitle>Car Shows</PageTitle>
 
-<RadzenDialog />
+@if (!UserSession.IsAuthenticated)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in before viewing car shows.</RadzenAlert>
+}
+else
+{
+    <RadzenDialog />
+    <RadzenStack Gap="1rem">
+        <RadzenText TextStyle="TextStyle.H4">Car Show Browser</RadzenText>
+        <RadzenText TextStyle="TextStyle.Caption">Acting user: @UserSession.EffectiveDisplayName</RadzenText>
 
-<RadzenStack Gap="1rem">
-    <RadzenText TextStyle="TextStyle.H4">Car Show Browser</RadzenText>
+        <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
+            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                <RadzenFormField Text="Select Car Show" Variant="Variant.Outlined" Style="width:100%;">
+                    <RadzenDropDown TValue="int?"
+                                    Data="@carShows"
+                                    TextProperty="Name"
+                                    ValueProperty="ShowId"
+                                    @bind-Value="selectedShowId"
+                                    Change="@OnShowSelectionChanged"
+                                    AllowClear="true"
+                                    Placeholder="Choose a show"
+                                    Style="width:100%;" />
+                </RadzenFormField>
+            </RadzenColumn>
+        </RadzenRow>
 
-    <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
-        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
-            <RadzenFormField Text="Select Car Show" Variant="Variant.Outlined" Style="width:100%;">
-                <RadzenDropDown TValue="int?"
-                                Data="@carShows"
-                                TextProperty="Name"
-                                ValueProperty="ShowId"
-                                @bind-Value="selectedShowId"
-                                Change="@OnShowSelectionChanged"
-                                AllowClear="true"
-                                Placeholder="Choose a show"
-                                Style="width:100%;" />
-            </RadzenFormField>
-        </RadzenColumn>
-    </RadzenRow>
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+        }
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
-    }
+        @if (isLoading)
+        {
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+        }
 
-    @if (isLoading)
-    {
-        <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
-    }
+        @if (selectedShow is not null)
+        {
+            <RadzenCard>
+                <RadzenStack Gap="0.5rem">
+                    <RadzenText TextStyle="TextStyle.H5">@selectedShow.Name</RadzenText>
+                    <RadzenRow>
+                        <RadzenColumn Size="12" SizeMD="6"><b>Location:</b> @Display(selectedShow.Location)</RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="6"><b>Category:</b> @Display(selectedShow.Category)</RadzenColumn>
+                    </RadzenRow>
+                    <RadzenRow>
+                        <RadzenColumn Size="12" SizeMD="6"><b>Event Date:</b> @DisplayDate(selectedShow.EventDate)</RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="6"><b>Total Participants:</b> @Display(selectedShow.TotalParticipants)</RadzenColumn>
+                    </RadzenRow>
+                    <RadzenText><b>Description:</b> @Display(selectedShow.Description)</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
 
-    @if (selectedShow is not null)
-    {
-        <RadzenCard>
-            <RadzenStack Gap="0.5rem">
-                <RadzenText TextStyle="TextStyle.H5">@selectedShow.Name</RadzenText>
-                <RadzenRow>
-                    <RadzenColumn Size="12" SizeMD="6"><b>Location:</b> @Display(selectedShow.Location)</RadzenColumn>
-                    <RadzenColumn Size="12" SizeMD="6"><b>Category:</b> @Display(selectedShow.Category)</RadzenColumn>
-                </RadzenRow>
-                <RadzenRow>
-                    <RadzenColumn Size="12" SizeMD="6"><b>Event Date:</b> @DisplayDate(selectedShow.EventDate)</RadzenColumn>
-                    <RadzenColumn Size="12" SizeMD="6"><b>Total Participants:</b> @Display(selectedShow.TotalParticipants)</RadzenColumn>
-                </RadzenRow>
-                <RadzenText><b>Description:</b> @Display(selectedShow.Description)</RadzenText>
-            </RadzenStack>
-        </RadzenCard>
-
-        <RadzenDataGrid Data="@entries" TItem="CarShowEntryDto" AllowPaging="true" PageSize="10" EmptyText="No cars found for this show.">
-            <Columns>
-                <RadzenDataGridColumn TItem="CarShowEntryDto" Property="EntryNumber" Title="#" Width="80px" />
-                <RadzenDataGridColumn TItem="CarShowEntryDto" Property="Vin" Title="VIN" Width="220px" />
-                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Year">
-                    <Template Context="entry">@Display(entry.CarDetail?.Year)</Template>
-                </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Make">
-                    <Template Context="entry">@Display(entry.CarDetail?.Make)</Template>
-                </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Model">
-                    <Template Context="entry">@Display(entry.CarDetail?.Model)</Template>
-                </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Owner">
-                    <Template Context="entry">@Display(entry.CarDetail?.Owner)</Template>
-                </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Details" Sortable="false" Filterable="false" Width="110px">
-                    <Template Context="entry">
-                        <RadzenButton Text="Details" Size="ButtonSize.Small" Click="@(async _ => await OpenDetails(entry))" />
-                    </Template>
-                </RadzenDataGridColumn>
-            </Columns>
-        </RadzenDataGrid>
-    }
-</RadzenStack>
+            <RadzenDataGrid Data="@entries" TItem="CarShowEntryDto" AllowPaging="true" PageSize="10" EmptyText="No cars found for this show.">
+                <Columns>
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="EntryNumber" Title="#" Width="80px" />
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="Vin" Title="VIN" Width="220px" />
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Year">
+                        <Template Context="entry">@Display(entry.CarDetail?.Year)</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Make">
+                        <Template Context="entry">@Display(entry.CarDetail?.Make)</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Model">
+                        <Template Context="entry">@Display(entry.CarDetail?.Model)</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Owner">
+                        <Template Context="entry">@Display(entry.CarDetail?.Owner)</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Details" Sortable="false" Filterable="false" Width="110px">
+                        <Template Context="entry">
+                            <RadzenButton Text="Details" Size="ButtonSize.Small" Click="@(async _ => await OpenDetails(entry))" />
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        }
+    </RadzenStack>
+}
 
 @code {
     private List<CarShowDto> carShows = [];
@@ -89,6 +98,12 @@
 
     protected override async Task OnInitializedAsync()
     {
+        if (!UserSession.IsAuthenticated)
+        {
+            Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString("/fetch-carshows")}");
+            return;
+        }
+
         try
         {
             var response = await Client.Api.CarShows.GetAsync();
@@ -171,7 +186,7 @@
 
         await DialogService.OpenAsync<ModalCarDetail>(
             $"{Display(detail.Year)} {Display(detail.Make)} {Display(detail.Model)}",
-            new Dictionary<string, object>
+            new Dictionary<string, object?>
             {
                 { nameof(ModalCarDetail.CarDetail), detail }
             },
