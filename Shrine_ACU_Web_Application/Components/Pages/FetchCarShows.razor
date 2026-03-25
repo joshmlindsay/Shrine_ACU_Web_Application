@@ -11,6 +11,10 @@
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in before viewing car shows.</RadzenAlert>
 }
+else if (!UserSession.CanRead)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">Your account does not have permission to view car shows.</RadzenAlert>
+}
 else
 {
     <RadzenDialog />
@@ -101,6 +105,12 @@ else
         if (!UserSession.IsAuthenticated)
         {
             Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString("/fetch-carshows")}");
+            return;
+        }
+
+        if (!UserSession.CanRead)
+        {
+            Navigation.NavigateTo("/", replace: true);
             return;
         }
 

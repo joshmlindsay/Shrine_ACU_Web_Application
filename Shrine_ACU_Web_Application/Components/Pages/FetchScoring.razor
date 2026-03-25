@@ -10,6 +10,10 @@
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in before using scoring.</RadzenAlert>
 }
+else if (!UserSession.CanAccessScoring)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">Your account does not have permission to view scoring.</RadzenAlert>
+}
 else
 {
 <RadzenStack Gap="1rem">
@@ -378,10 +382,22 @@ else
 
     private bool CanEditSelectedEntry => UserSession.CanEditEntry(SelectedEntry);
 
-    private bool CanRunFinalScores => UserSession.IsAuthenticated && selectedShowId.HasValue;
+    private bool CanRunFinalScores => UserSession.CanManage && selectedShowId.HasValue;
 
     protected override async Task OnInitializedAsync()
     {
+        if (!UserSession.IsAuthenticated)
+        {
+            Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString("/fetch-scoring")}", replace: true);
+            return;
+        }
+
+        if (!UserSession.CanAccessScoring)
+        {
+            Navigation.NavigateTo("/", replace: true);
+            return;
+        }
+
         await LoadJudgeOptionsAsync();
         SetDefaultJudgeName();
         await LoadShowsAsync();

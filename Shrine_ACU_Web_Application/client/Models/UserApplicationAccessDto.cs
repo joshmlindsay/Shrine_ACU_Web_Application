@@ -20,6 +20,8 @@ namespace AcuCarShowClient.Models
 #else
         public string AccessLevel { get; set; }
 #endif
+        /// <summary>The accessRoles property</summary>
+        public global::AcuCarShowClient.Models.UserAccessRole? AccessRoles { get; set; }
         /// <summary>The applicationId property</summary>
         public int? ApplicationId { get; set; }
         /// <summary>The canManage property</summary>
@@ -53,6 +55,7 @@ namespace AcuCarShowClient.Models
             return new Dictionary<string, Action<IParseNode>>
             {
                 { "accessLevel", n => { AccessLevel = n.GetStringValue(); } },
+                { "accessRoles", n => { AccessRoles = n.GetEnumValue<global::AcuCarShowClient.Models.UserAccessRole>(); } },
                 { "applicationId", n => { ApplicationId = n.GetIntValue(); } },
                 { "canManage", n => { CanManage = n.GetBoolValue(); } },
                 { "canRead", n => { CanRead = n.GetBoolValue(); } },
@@ -70,6 +73,7 @@ namespace AcuCarShowClient.Models
         {
             if(ReferenceEquals(writer, null)) throw new ArgumentNullException(nameof(writer));
             writer.WriteStringValue("accessLevel", AccessLevel);
+            writer.WriteEnumValue<global::AcuCarShowClient.Models.UserAccessRole>("accessRoles", AccessRoles);
             writer.WriteIntValue("applicationId", ApplicationId);
             writer.WriteBoolValue("canManage", CanManage);
             writer.WriteBoolValue("canRead", CanRead);

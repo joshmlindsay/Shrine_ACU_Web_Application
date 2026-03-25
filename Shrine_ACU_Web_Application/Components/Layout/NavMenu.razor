@@ -27,23 +27,32 @@
         }
         else
         {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="fetch-carshows">
-                    <span class="bi bi-car-front" aria-hidden="true"></span> Car Shows
-                </NavLink>
-            </div>
+            @if (UserSession.CanRead)
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="fetch-carshows">
+                        <span class="bi bi-car-front" aria-hidden="true"></span> Car Shows
+                    </NavLink>
+                </div>
+            }
 
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="fetch-signup">
-                    <span class="bi bi-person-plus" aria-hidden="true"></span> Signup
-                </NavLink>
-            </div>
+            @if (UserSession.CanWrite)
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="fetch-signup">
+                        <span class="bi bi-person-plus" aria-hidden="true"></span> Signup
+                    </NavLink>
+                </div>
+            }
 
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="fetch-scoring">
-                    <span class="bi bi-clipboard-check" aria-hidden="true"></span> Scoring
-                </NavLink>
-            </div>
+            @if (UserSession.CanAccessScoring)
+            {
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="fetch-scoring">
+                        <span class="bi bi-clipboard-check" aria-hidden="true"></span> Scoring
+                    </NavLink>
+                </div>
+            }
         }
     </nav>
 </div>

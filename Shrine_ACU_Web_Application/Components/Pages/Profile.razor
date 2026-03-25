@@ -1,8 +1,10 @@
 @page "/profile"
 @rendermode InteractiveServer
 
+@inject AcuCarShowClient Client
 @inject UserSessionService UserSession
 @inject NavigationManager Navigation
+@inject DialogService DialogService
 
 <PageTitle>Profile</PageTitle>
 
@@ -13,33 +15,363 @@
 else
 {
     <RadzenStack Gap="1rem">
-        <RadzenText TextStyle="TextStyle.H4">Profile</RadzenText>
+        <RadzenRow AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+            <RadzenColumn Size="12" SizeMD="8">
+                <RadzenText TextStyle="TextStyle.H4">My Account</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">Manage profile details, password, and account activity.</RadzenText>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+                    <RadzenButton Text="Refresh" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="RefreshAsync" Disabled="isBusy" />
+                    <RadzenButton Text="Change Password" Icon="lock" ButtonStyle="ButtonStyle.Primary" Click="OpenChangePasswordDialogAsync" Disabled="isBusy" />
+                </RadzenStack>
+            </RadzenColumn>
+        </RadzenRow>
 
-        <RadzenCard>
-            <RadzenStack Gap="0.5rem">
-                <RadzenText><b>Display Name:</b> @Display(UserSession.CurrentUser?.DisplayName)</RadzenText>
-                <RadzenText><b>Username:</b> @Display(UserSession.CurrentUser?.Username)</RadzenText>
-                <RadzenText><b>First Name:</b> @Display(UserSession.CurrentUser?.FirstName)</RadzenText>
-                <RadzenText><b>Last Name:</b> @Display(UserSession.CurrentUser?.LastName)</RadzenText>
-                <RadzenText><b>Email:</b> @Display(UserSession.CurrentUser?.Email)</RadzenText>
-                <RadzenText><b>User ID:</b> @Display(UserSession.CurrentUser?.UserId)</RadzenText>
-                <RadzenText><b>Role:</b> @(UserSession.IsAdmin ? "Admin" : "User")</RadzenText>
-                <RadzenText><b>Acting As:</b> @UserSession.EffectiveDisplayName</RadzenText>
-            </RadzenStack>
-        </RadzenCard>
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(successMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Success">@successMessage</RadzenAlert>
+        }
+
+        <RadzenTabs @bind-SelectedIndex="selectedTabIndex">
+            <Tabs>
+                <RadzenTabsItem Text="Profile Information">
+                    <RadzenCard>
+                        <RadzenTemplateForm TItem="ProfileFormModel" Data="@profileForm" Submit="SaveProfileAsync">
+                            <RadzenStack Gap="1rem">
+                                <RadzenRow Gap="1rem">
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Display Name" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextBox @bind-Value="profileForm.DisplayName" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Username" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextBox Value="@Display(UserSession.CurrentUser?.Username)" ReadOnly="true" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                </RadzenRow>
+
+                                <RadzenRow Gap="1rem">
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="First Name" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextBox @bind-Value="profileForm.FirstName" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Last Name" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextBox @bind-Value="profileForm.LastName" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                </RadzenRow>
+
+                                <RadzenRow Gap="1rem">
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Email" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextBox @bind-Value="profileForm.Email" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="User ID" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextBox Value="@Display(UserSession.CurrentUser?.UserId)" ReadOnly="true" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                </RadzenRow>
+
+                                <RadzenStack Gap="0.5rem">
+                                    <RadzenText TextStyle="TextStyle.Body1"><b>Roles & Access</b></RadzenText>
+                                    @if (!UserSession.RoleLabels.Any())
+                                    {
+                                        <RadzenBadge Text="No role labels found" BadgeStyle="BadgeStyle.Warning" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                            @foreach (var role in UserSession.RoleLabels)
+                                            {
+                                                <RadzenBadge Text="@role" BadgeStyle="BadgeStyle.Info" />
+                                            }
+                                        </RadzenStack>
+                                    }
+                                </RadzenStack>
+
+                                <RadzenButton Text="Save Profile" Icon="save" ButtonStyle="ButtonStyle.Primary" ButtonType="ButtonType.Submit" Disabled="isBusy" />
+                            </RadzenStack>
+                        </RadzenTemplateForm>
+                    </RadzenCard>
+                </RadzenTabsItem>
+
+                <RadzenTabsItem Text="Event History">
+                    <RadzenStack Gap="1rem">
+                        <RadzenCard>
+                            <RadzenText TextStyle="TextStyle.H6">My Entries</RadzenText>
+                            <RadzenDataGrid Data="@myEntries" TItem="CarShowEntryDto" AllowPaging="true" PageSize="8" EmptyText="No entries found for your account.">
+                                <Columns>
+                                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="EntryNumber" Title="#" Width="80px" />
+                                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="Vin" Title="VIN" Width="220px" />
+                                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="ShowId" Title="Show" Width="90px" />
+                                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="Status" Title="Status" Width="140px" />
+                                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Registered">
+                                        <Template Context="item">@DisplayDateTime(item.RegistrationDate)</Template>
+                                    </RadzenDataGridColumn>
+                                </Columns>
+                            </RadzenDataGrid>
+                        </RadzenCard>
+
+                        <RadzenCard>
+                            <RadzenText TextStyle="TextStyle.H6">My Scoring Activity</RadzenText>
+                            <RadzenDataGrid Data="@myAnswers" TItem="CarShowAnswerDto" AllowPaging="true" PageSize="8" EmptyText="No scoring activity found for your account.">
+                                <Columns>
+                                    <RadzenDataGridColumn TItem="CarShowAnswerDto" Property="EntryId" Title="Entry" Width="90px" />
+                                    <RadzenDataGridColumn TItem="CarShowAnswerDto" Property="QuestionId" Title="Question" Width="100px" />
+                                    <RadzenDataGridColumn TItem="CarShowAnswerDto" Property="JudgedBy" Title="Judge" Width="220px" />
+                                    <RadzenDataGridColumn TItem="CarShowAnswerDto" Title="Last Modified">
+                                        <Template Context="item">@DisplayDateTime(item.LastModified ?? item.AnsweredDate)</Template>
+                                    </RadzenDataGridColumn>
+                                </Columns>
+                            </RadzenDataGrid>
+                        </RadzenCard>
+                    </RadzenStack>
+                </RadzenTabsItem>
+
+                <RadzenTabsItem Text="Password Reset">
+                    <RadzenStack Gap="1rem">
+                        <RadzenCard>
+                            <RadzenStack Gap="0.75rem">
+                                <RadzenText TextStyle="TextStyle.H6">Request Password Reset</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Body2">If an account matches, backend delivery of the reset token is triggered.</RadzenText>
+                                <RadzenFormField Text="Username" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenTextBox @bind-Value="resetRequestUsername" Style="width:100%;" />
+                                </RadzenFormField>
+                                <RadzenFormField Text="Email" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenTextBox @bind-Value="resetRequestEmail" Style="width:100%;" />
+                                </RadzenFormField>
+                                <RadzenButton Text="Request Reset" Icon="mail" ButtonStyle="ButtonStyle.Light" Click="RequestPasswordResetAsync" Disabled="isBusy" />
+                            </RadzenStack>
+                        </RadzenCard>
+
+                        <RadzenCard>
+                            <RadzenStack Gap="0.75rem">
+                                <RadzenText TextStyle="TextStyle.H6">Complete Password Reset</RadzenText>
+                                <RadzenFormField Text="Username" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenTextBox @bind-Value="resetCompleteUsername" Style="width:100%;" />
+                                </RadzenFormField>
+                                <RadzenFormField Text="Reset Token" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenTextBox @bind-Value="resetToken" Style="width:100%;" />
+                                </RadzenFormField>
+                                <RadzenFormField Text="New Password" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenPassword @bind-Value="resetNewPassword" Style="width:100%;" />
+                                </RadzenFormField>
+                                <RadzenButton Text="Reset Password" Icon="vpn_key" ButtonStyle="ButtonStyle.Primary" Click="CompletePasswordResetAsync" Disabled="isBusy" />
+                            </RadzenStack>
+                        </RadzenCard>
+                    </RadzenStack>
+                </RadzenTabsItem>
+            </Tabs>
+        </RadzenTabs>
     </RadzenStack>
 }
 
 @code {
-    protected override void OnInitialized()
+    private readonly ProfileFormModel profileForm = new();
+
+    private List<CarShowEntryDto> myEntries = [];
+    private List<CarShowAnswerDto> myAnswers = [];
+
+    private string? errorMessage;
+    private string? successMessage;
+    private bool isBusy;
+    private int selectedTabIndex;
+
+    private string? resetRequestUsername;
+    private string? resetRequestEmail;
+    private string? resetCompleteUsername;
+    private string? resetToken;
+    private string? resetNewPassword;
+
+    protected override async Task OnInitializedAsync()
     {
         if (!UserSession.IsAuthenticated)
         {
             Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString("/profile")}", replace: true);
+            return;
         }
+
+        LoadProfileForm();
+        await LoadHistoryAsync();
+    }
+
+    private void LoadProfileForm()
+    {
+        profileForm.DisplayName = UserSession.CurrentUser?.DisplayName;
+        profileForm.FirstName = UserSession.CurrentUser?.FirstName;
+        profileForm.LastName = UserSession.CurrentUser?.LastName;
+        profileForm.Email = UserSession.CurrentUser?.Email;
+
+        resetRequestUsername = UserSession.CurrentUser?.Username;
+        resetRequestEmail = UserSession.CurrentUser?.Email;
+        resetCompleteUsername = UserSession.CurrentUser?.Username;
+    }
+
+    private async Task SaveProfileAsync(ProfileFormModel _)
+    {
+        ResetMessages();
+        isBusy = true;
+
+        try
+        {
+            var result = await UserSession.UpdateCurrentUserProfileAsync(profileForm.DisplayName, profileForm.FirstName, profileForm.LastName, profileForm.Email);
+            if (!result.Succeeded)
+            {
+                errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            successMessage = "Profile updated successfully.";
+            LoadProfileForm();
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task OpenChangePasswordDialogAsync()
+    {
+        ResetMessages();
+
+        var result = await DialogService.OpenAsync<ChangePasswordDialog>(
+            "Change Password",
+            null,
+            new DialogOptions { Width = "500px", CloseDialogOnEsc = true, CloseDialogOnOverlayClick = false });
+
+        if (result is bool changed && changed)
+        {
+            successMessage = "Password updated successfully.";
+        }
+    }
+
+    private async Task RequestPasswordResetAsync()
+    {
+        ResetMessages();
+        isBusy = true;
+
+        try
+        {
+            var result = await UserSession.RequestPasswordResetAsync(resetRequestUsername, resetRequestEmail);
+            if (!result.Succeeded)
+            {
+                errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            successMessage = result.Message;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task CompletePasswordResetAsync()
+    {
+        ResetMessages();
+        isBusy = true;
+
+        try
+        {
+            var result = await UserSession.CompletePasswordResetAsync(resetCompleteUsername, resetToken, resetNewPassword);
+            if (!result.Succeeded)
+            {
+                errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            successMessage = result.Message;
+            resetToken = null;
+            resetNewPassword = null;
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        ResetMessages();
+        isBusy = true;
+
+        try
+        {
+            var refresh = await UserSession.RefreshCurrentUserAsync();
+            if (!refresh.Succeeded)
+            {
+                errorMessage = refresh.ErrorMessage;
+                return;
+            }
+
+            LoadProfileForm();
+            await LoadHistoryAsync();
+            successMessage = "Profile data refreshed.";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        if (UserSession.CurrentUser?.UserId is not int userId)
+        {
+            myEntries = [];
+            myAnswers = [];
+            return;
+        }
+
+        try
+        {
+            var allEntries = await Client.Api.CarShowEntries.GetAsync() ?? [];
+            myEntries = allEntries
+                .Where(x => x.SubmittedByUserId == userId)
+                .OrderByDescending(x => x.RegistrationDate ?? DateTimeOffset.MinValue)
+                .ToList();
+
+            var allAnswers = await Client.Api.CarShowAnswers.GetAsync() ?? [];
+            myAnswers = allAnswers
+                .Where(x => x.SubmittedByUserId == userId)
+                .OrderByDescending(x => x.LastModified ?? x.AnsweredDate ?? DateTimeOffset.MinValue)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load account history. {ex.Message}";
+        }
+    }
+
+    private void ResetMessages()
+    {
+        errorMessage = null;
+        successMessage = null;
     }
 
     private static string Display(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
 
     private static string Display(int? value) => value?.ToString() ?? "-";
+
+    private static string DisplayDateTime(DateTimeOffset? value) => value?.ToLocalTime().ToString("MMM dd, yyyy h:mm tt") ?? "-";
+
+    private sealed class ProfileFormModel
+    {
+        public string? DisplayName { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+    }
 }

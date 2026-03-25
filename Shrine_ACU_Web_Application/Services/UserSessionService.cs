@@ -1,7 +1,7 @@
 using global::AcuCarShowClient;
 using AcuCarShowClient.Models;
-using System.Text.Json;
 using Microsoft.JSInterop;
+using System.Text.Json;
 
 namespace Shrine_ACU_Web_Application.Services;
 
@@ -22,14 +22,20 @@ public sealed class UserSessionService
     public event Action? StateChanged;
 
     public AppUserDto? CurrentUser { get; private set; }
-
     public AppUserDto? EffectiveUser { get; private set; }
 
     public IReadOnlyList<AppUserDto> AvailableUsers => _availableUsers;
-
     public bool IsAuthenticated => CurrentUser is not null;
+    public IReadOnlyList<UserApplicationAccessDto> Accesses => CurrentUser?.ApplicationAccesses ?? [];
 
-    public bool IsAdmin => HasAdminAccess(CurrentUser);
+    private PermissionPolicy CurrentPolicy => ResolvePolicy(Accesses);
+
+    public bool IsAdmin => CurrentPolicy.IsAdmin;
+    public bool CanManage => CurrentPolicy.CanManage;
+    public bool CanWrite => CurrentPolicy.CanWrite;
+    public bool CanRead => CurrentPolicy.CanRead;
+    public bool CanManageUsers => CurrentPolicy.CanManageUsers;
+    public bool CanAccessScoring => CurrentPolicy.CanAccessScoring;
 
     public int? EffectiveUserId => EffectiveUser?.UserId;
 
@@ -40,14 +46,12 @@ public sealed class UserSessionService
                 ? EffectiveUser!.Username!
                 : "-";
 
+    public IReadOnlyList<string> RoleLabels => BuildRoleLabels(Accesses);
+
     public async Task InitializeAsync(IJSRuntime jsRuntime)
     {
         _jsRuntime = jsRuntime;
-
-        if (jsRuntime is null)
-        {
-            return;
-        }
+        if (jsRuntime is null) return;
 
         try
         {
@@ -63,7 +67,7 @@ public sealed class UserSessionService
                 EffectiveUser = JsonSerializer.Deserialize<AppUserDto>(effectiveUserJson);
             }
 
-            if (IsAuthenticated && IsAdmin)
+            if (IsAuthenticated && CanManageUsers)
             {
                 await LoadAvailableUsersAsync();
             }
@@ -72,7 +76,6 @@ public sealed class UserSessionService
         }
         catch
         {
-            // localStorage access failed or invalid JSON, continue without cached session
         }
     }
 
@@ -86,15 +89,8 @@ public sealed class UserSessionService
         try
         {
             var user = await _client.Api.AppUsers.Username[username.Trim()].GetAsync();
-            if (user is null)
-            {
-                return LoginResult.Fail("User was not found.");
-            }
-
-            if (user.IsActive == false)
-            {
-                return LoginResult.Fail("User is inactive.");
-            }
+            if (user is null) return LoginResult.Fail("User was not found.");
+            if (user.IsActive == false) return LoginResult.Fail("User is inactive.");
 
             if (!string.IsNullOrWhiteSpace(user.Password) && !string.Equals(user.Password, password, StringComparison.Ordinal))
             {
@@ -109,7 +105,7 @@ public sealed class UserSessionService
             CurrentUser = user;
             EffectiveUser = user;
 
-            if (IsAdmin)
+            if (CanManageUsers)
             {
                 await LoadAvailableUsersAsync();
             }
@@ -129,6 +125,148 @@ public sealed class UserSessionService
         }
     }
 
+    public async Task<OperationResult> RefreshCurrentUserAsync()
+    {
+        if (CurrentUser?.UserId is not int currentUserId)
+        {
+            return OperationResult.Fail("No active user session.");
+        }
+
+        try
+        {
+            var refreshed = await _client.Api.AppUsers[currentUserId].GetAsync();
+            if (refreshed is null)
+            {
+                return OperationResult.Fail("Unable to refresh user profile.");
+            }
+
+            if (refreshed.UserId.HasValue && (refreshed.ApplicationAccesses is null || refreshed.ApplicationAccesses.Count == 0))
+            {
+                refreshed.ApplicationAccesses = await _client.Api.UserApplicationAccess.User[refreshed.UserId.Value].GetAsync() ?? [];
+            }
+
+            CurrentUser = refreshed;
+            EffectiveUser ??= refreshed;
+
+            if (CanManageUsers)
+            {
+                await LoadAvailableUsersAsync();
+            }
+
+            await SaveSessionAsync();
+            NotifyStateChanged();
+            return OperationResult.Success();
+        }
+        catch (Exception ex)
+        {
+            return OperationResult.Fail($"Unable to refresh profile. {ex.Message}");
+        }
+    }
+
+    public async Task<OperationResult> UpdateCurrentUserProfileAsync(string? displayName, string? firstName, string? lastName, string? email)
+    {
+        if (CurrentUser?.UserId is not int currentUserId)
+        {
+            return OperationResult.Fail("No active user session.");
+        }
+
+        try
+        {
+            var user = await _client.Api.AppUsers[currentUserId].GetAsync();
+            if (user is null)
+            {
+                return OperationResult.Fail("Unable to load your profile.");
+            }
+
+            user.DisplayName = NullIfWhiteSpace(displayName);
+            user.FirstName = NullIfWhiteSpace(firstName);
+            user.LastName = NullIfWhiteSpace(lastName);
+            user.Email = NullIfWhiteSpace(email);
+
+            await _client.Api.AppUsers[user.UserId!.Value].PutAsync(user);
+            return await RefreshCurrentUserAsync();
+        }
+        catch (Exception ex)
+        {
+            return OperationResult.Fail($"Unable to update profile. {ex.Message}");
+        }
+    }
+
+    public async Task<OperationResult> ChangePasswordAsync(string? currentPassword, string? newPassword)
+    {
+        if (CurrentUser?.UserId is not int currentUserId)
+        {
+            return OperationResult.Fail("No active user session.");
+        }
+
+        if (string.IsNullOrWhiteSpace(currentPassword) || string.IsNullOrWhiteSpace(newPassword))
+        {
+            return OperationResult.Fail("Current and new password are required.");
+        }
+
+        try
+        {
+            await _client.Api.AppUsers[currentUserId].ChangePassword.PostAsync(new PasswordChangeRequestDto
+            {
+                CurrentPassword = currentPassword,
+                NewPassword = newPassword
+            });
+
+            return OperationResult.Success("Password updated successfully.");
+        }
+        catch (Exception ex)
+        {
+            return OperationResult.Fail($"Unable to change password. {ex.Message}");
+        }
+    }
+
+    public async Task<OperationResult> RequestPasswordResetAsync(string? username, string? email)
+    {
+        if (string.IsNullOrWhiteSpace(username) && string.IsNullOrWhiteSpace(email))
+        {
+            return OperationResult.Fail("Provide username or email.");
+        }
+
+        try
+        {
+            await _client.Api.AppUsers.RequestPasswordReset.PostAsync(new PasswordResetRequestDto
+            {
+                Username = NullIfWhiteSpace(username),
+                Email = NullIfWhiteSpace(email)
+            });
+
+            return OperationResult.Success("If an account matches the request, a reset token has been sent.");
+        }
+        catch (Exception ex)
+        {
+            return OperationResult.Fail($"Unable to request password reset. {ex.Message}");
+        }
+    }
+
+    public async Task<OperationResult> CompletePasswordResetAsync(string? username, string? resetToken, string? newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(resetToken) || string.IsNullOrWhiteSpace(newPassword))
+        {
+            return OperationResult.Fail("Username, reset token, and new password are required.");
+        }
+
+        try
+        {
+            await _client.Api.AppUsers.ResetPassword.PostAsync(new PasswordResetCompleteDto
+            {
+                Username = username.Trim(),
+                ResetToken = resetToken.Trim(),
+                NewPassword = newPassword
+            });
+
+            return OperationResult.Success("Password reset completed successfully.");
+        }
+        catch (Exception ex)
+        {
+            return OperationResult.Fail($"Unable to reset password. {ex.Message}");
+        }
+    }
+
     public async Task LogoutAsync()
     {
         CurrentUser = null;
@@ -144,7 +282,6 @@ public sealed class UserSessionService
             }
             catch
             {
-                // localStorage removal failed, but continue with logout
             }
         }
 
@@ -161,15 +298,8 @@ public sealed class UserSessionService
 
     public async Task EnsureAdminUsersLoadedAsync()
     {
-        if (!IsAdmin)
-        {
-            return;
-        }
-
-        if (_availableUsers.Count > 0)
-        {
-            return;
-        }
+        if (!CanManageUsers) return;
+        if (_availableUsers.Count > 0) return;
 
         await LoadAvailableUsersAsync();
         NotifyStateChanged();
@@ -177,12 +307,9 @@ public sealed class UserSessionService
 
     public void SetEffectiveUser(int? userId)
     {
-        if (!IsAuthenticated)
-        {
-            return;
-        }
+        if (!IsAuthenticated) return;
 
-        if (!IsAdmin)
+        if (!CanManageUsers)
         {
             EffectiveUser = CurrentUser;
             NotifyStateChanged();
@@ -200,33 +327,21 @@ public sealed class UserSessionService
         NotifyStateChanged();
     }
 
-    public bool CanEditEntry(global::AcuCarShowClient.Models.CarShowEntryDto? entry)
+    public bool CanEditEntry(CarShowEntryDto? entry)
     {
-        if (!IsAuthenticated || entry is null)
-        {
-            return false;
-        }
-
-        if (IsAdmin)
-        {
-            return true;
-        }
+        if (!IsAuthenticated || entry is null) return false;
+        if (CanManage) return true;
+        if (!CanWrite) return false;
 
         var currentUserId = CurrentUser?.UserId;
-        if (!currentUserId.HasValue || !entry.SubmittedByUserId.HasValue)
-        {
-            return false;
-        }
+        if (!currentUserId.HasValue || !entry.SubmittedByUserId.HasValue) return false;
 
         return entry.SubmittedByUserId == currentUserId.Value;
     }
 
     private async Task SaveSessionAsync()
     {
-        if (_jsRuntime is null)
-        {
-            return;
-        }
+        if (_jsRuntime is null) return;
 
         try
         {
@@ -244,7 +359,6 @@ public sealed class UserSessionService
         }
         catch
         {
-            // localStorage save failed, but continue without persistence
         }
     }
 
@@ -264,17 +378,84 @@ public sealed class UserSessionService
         }
     }
 
-    private static bool HasAdminAccess(AppUserDto? user)
+    private static PermissionPolicy ResolvePolicy(IEnumerable<UserApplicationAccessDto> accesses)
     {
-        if (user?.ApplicationAccesses is null)
+        var policy = PermissionPolicy.None;
+
+        foreach (var access in accesses)
+        {
+            policy = policy.Merge(ResolvePolicyForAccess(access));
+        }
+
+        return policy;
+    }
+
+    private static PermissionPolicy ResolvePolicyForAccess(UserApplicationAccessDto access)
+    {
+        var rolePolicy = access.AccessRoles switch
+        {
+            UserAccessRole.Admin => new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: true, CanManageUsers: true, CanAccessScoring: true, IsAdmin: true),
+            UserAccessRole.Manager => new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: true, CanManageUsers: true, CanAccessScoring: true, IsAdmin: false),
+            UserAccessRole.Judge => new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: false, CanManageUsers: false, CanAccessScoring: true, IsAdmin: false),
+            UserAccessRole.Participant => new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: false, CanManageUsers: false, CanAccessScoring: false, IsAdmin: false),
+            _ => PermissionPolicy.None
+        };
+
+        var accessLevelPolicy = new PermissionPolicy(
+            CanRead: AccessLevelContains(access.AccessLevel, "read") || AccessLevelContains(access.AccessLevel, "view"),
+            CanWrite: AccessLevelContains(access.AccessLevel, "write") || AccessLevelContains(access.AccessLevel, "edit"),
+            CanManage: AccessLevelContains(access.AccessLevel, "manage") || AccessLevelContains(access.AccessLevel, "admin") || AccessLevelContains(access.AccessLevel, "superadmin"),
+            CanManageUsers: AccessLevelContains(access.AccessLevel, "manage") || AccessLevelContains(access.AccessLevel, "admin") || AccessLevelContains(access.AccessLevel, "superadmin"),
+            CanAccessScoring: AccessLevelContains(access.AccessLevel, "judge") || AccessLevelContains(access.AccessLevel, "scor") || AccessLevelContains(access.AccessLevel, "admin") || AccessLevelContains(access.AccessLevel, "manage"),
+            IsAdmin: AccessLevelContains(access.AccessLevel, "admin") || AccessLevelContains(access.AccessLevel, "superadmin"));
+
+        var flagPolicy = new PermissionPolicy(
+            CanRead: access.CanRead == true,
+            CanWrite: access.CanWrite == true,
+            CanManage: access.CanManage == true,
+            CanManageUsers: access.CanManage == true,
+            CanAccessScoring: access.CanManage == true || access.AccessRoles is UserAccessRole.Admin or UserAccessRole.Manager or UserAccessRole.Judge,
+            IsAdmin: access.CanManage == true && access.AccessRoles == UserAccessRole.Admin);
+
+        return rolePolicy.Merge(accessLevelPolicy).Merge(flagPolicy).Normalize();
+    }
+
+    private static bool AccessLevelContains(string? accessLevel, string token)
+    {
+        if (string.IsNullOrWhiteSpace(accessLevel))
         {
             return false;
         }
 
-        return user.ApplicationAccesses.Any(access =>
-            access.CanManage == true ||
-            (!string.IsNullOrWhiteSpace(access.AccessLevel) &&
-             access.AccessLevel.Contains("admin", StringComparison.OrdinalIgnoreCase)));
+        return accessLevel.Contains(token, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static IReadOnlyList<string> BuildRoleLabels(IEnumerable<UserApplicationAccessDto> accesses)
+    {
+        var labels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var access in accesses)
+        {
+            if (!string.IsNullOrWhiteSpace(access.AccessLevel))
+            {
+                foreach (var token in access.AccessLevel
+                             .Split(new[] { ',', ';', '|', '/' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    labels.Add(token);
+                }
+            }
+
+            if (access.CanManage == true) labels.Add("Manage");
+            if (access.CanWrite == true) labels.Add("Write");
+            if (access.CanRead == true) labels.Add("Read");
+
+            if (access.AccessRoles.HasValue && access.AccessRoles != UserAccessRole.None)
+            {
+                labels.Add($"Role: {access.AccessRoles.Value}");
+            }
+        }
+
+        return labels.OrderBy(x => x).ToList();
     }
 
     private static string GetUserLabel(AppUserDto user)
@@ -293,12 +474,48 @@ public sealed class UserSessionService
         return user.Username ?? string.Empty;
     }
 
+    private static string? NullIfWhiteSpace(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
     private void NotifyStateChanged() => StateChanged?.Invoke();
 
     public sealed record LoginResult(bool Succeeded, string? ErrorMessage)
     {
         public static LoginResult Success() => new(true, null);
-
         public static LoginResult Fail(string errorMessage) => new(false, errorMessage);
+    }
+
+    public sealed record OperationResult(bool Succeeded, string? ErrorMessage, string? Message)
+    {
+        public static OperationResult Success(string? message = null) => new(true, null, message);
+        public static OperationResult Fail(string errorMessage) => new(false, errorMessage, null);
+    }
+
+    private sealed record PermissionPolicy(bool CanRead, bool CanWrite, bool CanManage, bool CanManageUsers, bool CanAccessScoring, bool IsAdmin)
+    {
+        public static PermissionPolicy None => new(false, false, false, false, false, false);
+
+        public PermissionPolicy Merge(PermissionPolicy other)
+        {
+            return new PermissionPolicy(
+                CanRead || other.CanRead,
+                CanWrite || other.CanWrite,
+                CanManage || other.CanManage,
+                CanManageUsers || other.CanManageUsers,
+                CanAccessScoring || other.CanAccessScoring,
+                IsAdmin || other.IsAdmin);
+        }
+
+        public PermissionPolicy Normalize()
+        {
+            var manage = CanManage || IsAdmin;
+            var write = CanWrite || manage;
+            var read = CanRead || write;
+            var manageUsers = CanManageUsers || manage;
+            var scoring = CanAccessScoring || manage;
+            return new PermissionPolicy(read, write, manage, manageUsers, scoring, IsAdmin);
+        }
     }
 }

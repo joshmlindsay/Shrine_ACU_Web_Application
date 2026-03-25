@@ -2,6 +2,8 @@
 #pragma warning disable CS0618
 using AcuCarShowClient.Api.AppUsers.Item;
 using AcuCarShowClient.Api.AppUsers.Paged;
+using AcuCarShowClient.Api.AppUsers.RequestPasswordReset;
+using AcuCarShowClient.Api.AppUsers.ResetPassword;
 using AcuCarShowClient.Api.AppUsers.Username;
 using AcuCarShowClient.Models;
 using Microsoft.Kiota.Abstractions.Extensions;
@@ -24,6 +26,16 @@ namespace AcuCarShowClient.Api.AppUsers
         public global::AcuCarShowClient.Api.AppUsers.Paged.PagedRequestBuilder Paged
         {
             get => new global::AcuCarShowClient.Api.AppUsers.Paged.PagedRequestBuilder(PathParameters, RequestAdapter);
+        }
+        /// <summary>The requestPasswordReset property</summary>
+        public global::AcuCarShowClient.Api.AppUsers.RequestPasswordReset.RequestPasswordResetRequestBuilder RequestPasswordReset
+        {
+            get => new global::AcuCarShowClient.Api.AppUsers.RequestPasswordReset.RequestPasswordResetRequestBuilder(PathParameters, RequestAdapter);
+        }
+        /// <summary>The resetPassword property</summary>
+        public global::AcuCarShowClient.Api.AppUsers.ResetPassword.ResetPasswordRequestBuilder ResetPassword
+        {
+            get => new global::AcuCarShowClient.Api.AppUsers.ResetPassword.ResetPasswordRequestBuilder(PathParameters, RequestAdapter);
         }
         /// <summary>The username property</summary>
         public global::AcuCarShowClient.Api.AppUsers.Username.UsernameRequestBuilder Username

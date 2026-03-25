@@ -19,16 +19,16 @@
                 <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
                     <RadzenText TextStyle="TextStyle.Caption">Signed in as <b>@DisplayUser(UserSession.CurrentUser)</b></RadzenText>
 
-                    @if (UserSession.IsAdmin)
+                    @if (UserSession.CanManageUsers)
                     {
                         <RadzenDropDown TValue="int?"
-                                        Data="@UserSession.AvailableUsers"
-                                        TextProperty="DisplayName"
-                                        ValueProperty="UserId"
-                                        Value="@UserSession.EffectiveUserId"
-                                        Change="OnEffectiveUserChanged"
-                                        Style="min-width:220px;"
-                                        Placeholder="Acting user" />
+                                            Data="@UserSession.AvailableUsers"
+                                            TextProperty="DisplayName"
+                                            ValueProperty="UserId"
+                                            Value="@UserSession.EffectiveUserId"
+                                            Change="OnEffectiveUserChanged"
+                                            Style="min-width:220px;"
+                                            Placeholder="Acting user" />
                     }
                     else
                     {
