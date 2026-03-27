@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 env:
-  AZURE_WEBAPP_NAME: your-app-name-here
+  AZURE_WEBAPP_NAME: shrine-acu-portal   # ← Actual App Service name
   DOTNET_VERSION: '10.x'
   PROJECT_PATH: 'Shrine_ACU_Web_Application/Shrine_ACU_Web_Application.csproj'
   PUBLISH_PATH: './publish'
