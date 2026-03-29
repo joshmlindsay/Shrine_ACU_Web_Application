@@ -17,6 +17,10 @@ builder.Services.AddHttpClient("AcuCarShowApi", (sp, client) =>
     var configuration = sp.GetRequiredService<IConfiguration>();
     var baseUrl = configuration["AcuCarShowApi:BaseUrl"];
 
+#if DEBUG
+    baseUrl = "https://localhost:44355";
+#endif
+
     if (!string.IsNullOrWhiteSpace(baseUrl))
     {
         client.BaseAddress = new Uri(baseUrl);
@@ -38,6 +42,7 @@ builder.Services.AddScoped<AcuCarShowClient.AcuCarShowClient>((sp) =>
 });
 
 builder.Services.AddScoped<UserSessionService>();
+builder.Services.AddScoped<AppThemeService>();
 
 var app = builder.Build();
 

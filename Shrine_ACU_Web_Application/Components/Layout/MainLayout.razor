@@ -1,48 +1,24 @@
 ﻿@inherits LayoutComponentBase
 
 @inject UserSessionService UserSession
+@inject AppThemeService AppThemeService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @implements IDisposable
 
 <div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+    <NavMenu />
 
     <main>
-        <div class="top-row px-4" style="gap:1rem; display:flex; justify-content:space-between; align-items:center;">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-
-            @if (UserSession.IsAuthenticated)
-            {
-                <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
-                    <RadzenText TextStyle="TextStyle.Caption">Signed in as <b>@DisplayUser(UserSession.CurrentUser)</b></RadzenText>
-
-                    @if (UserSession.CanManageUsers)
-                    {
-                        <RadzenDropDown TValue="int?"
-                                            Data="@UserSession.AvailableUsers"
-                                            TextProperty="DisplayName"
-                                            ValueProperty="UserId"
-                                            Value="@UserSession.EffectiveUserId"
-                                            Change="OnEffectiveUserChanged"
-                                            Style="min-width:220px;"
-                                            Placeholder="Acting user" />
-                    }
-                    else
-                    {
-                        <RadzenBadge Text="@UserSession.EffectiveDisplayName" BadgeStyle="BadgeStyle.Info" />
-                    }
-
-                    <RadzenButton Text="Profile" Icon="person" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="NavigateToProfile" />
-                    <RadzenButton Text="Logout" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="LogoutAsync" />
-                </RadzenStack>
-            }
-        </div>
-
         <article class="content px-4">
-            @Body
+            @if (!hasInitialized)
+            {
+                <RadzenText TextStyle="TextStyle.Body2">Loading session...</RadzenText>
+            }
+            else
+            {
+                @Body
+            }
         </article>
     </main>
 </div>
@@ -61,13 +37,15 @@
 
     protected override void OnInitialized()
     {
-        UserSession.StateChanged += HandleSessionChanged;
+        UserSession.StateChanged += HandleStateChanged;
+        AppThemeService.StateChanged += HandleStateChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender) return;
 
+        await AppThemeService.InitializeAsync(JS);
         await UserSession.InitializeAsync(JS);
         await UserSession.EnsureAdminUsersLoadedAsync();
         hasInitialized = true;
@@ -75,7 +53,10 @@
         if (!UserSession.IsAuthenticated && !Navigation.Uri.Contains("/fetch-login"))
         {
             Navigation.NavigateTo("/fetch-login", replace: true);
+            return;
         }
+
+        await InvokeAsync(StateHasChanged);
     }
 
     protected override void OnParametersSet()
@@ -86,42 +67,11 @@
         }
     }
 
-    private void OnEffectiveUserChanged(object? value)
-    {
-        UserSession.SetEffectiveUser(value as int?);
-    }
-
-    private void NavigateToProfile()
-    {
-        Navigation.NavigateTo("/profile");
-    }
-
-    private async Task LogoutAsync()
-    {
-        await UserSession.LogoutAsync();
-        Navigation.NavigateTo("/fetch-login", forceLoad: false);
-    }
-
-    private static string DisplayUser(AppUserDto? user)
-    {
-        if (!string.IsNullOrWhiteSpace(user?.DisplayName))
-        {
-            return user!.DisplayName!;
-        }
-
-        var fullName = string.Join(' ', new[] { user?.FirstName, user?.LastName }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
-        if (!string.IsNullOrWhiteSpace(fullName))
-        {
-            return fullName;
-        }
-
-        return user?.Username ?? "-";
-    }
-
-    private void HandleSessionChanged() => InvokeAsync(StateHasChanged);
+    private void HandleStateChanged() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
-        UserSession.StateChanged -= HandleSessionChanged;
+        UserSession.StateChanged -= HandleStateChanged;
+        AppThemeService.StateChanged -= HandleStateChanged;
     }
 }

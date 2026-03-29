@@ -3,6 +3,7 @@
 
 @inject AcuCarShowClient Client
 @inject UserSessionService UserSession
+@inject AppThemeService AppThemeService
 @inject NavigationManager Navigation
 @inject DialogService DialogService
 
@@ -100,6 +101,19 @@ else
                                     }
                                 </RadzenStack>
 
+                                <RadzenStack Gap="0.5rem">
+                                    <RadzenText TextStyle="TextStyle.Body1"><b>Appearance</b></RadzenText>
+                                    <RadzenFormField Text="Theme" Variant="Variant.Outlined" Style="width:100%;max-width:320px;">
+                                        <RadzenDropDown TValue="string"
+                                                        Data="@themeOptions"
+                                                        TextProperty="Label"
+                                                        ValueProperty="Value"
+                                                        Value="@selectedTheme"
+                                                        Change="OnThemeChangedAsync"
+                                                        Style="width:100%;" />
+                                    </RadzenFormField>
+                                </RadzenStack>
+
                                 <RadzenButton Text="Save Profile" Icon="save" ButtonStyle="ButtonStyle.Primary" ButtonType="ButtonType.Submit" Disabled="isBusy" />
                             </RadzenStack>
                         </RadzenTemplateForm>
@@ -179,6 +193,12 @@ else
 
 @code {
     private readonly ProfileFormModel profileForm = new();
+    private static readonly IReadOnlyList<ThemeOption> themeOptions =
+    [
+        new("System default", "system"),
+        new("Light Mode", "light"),
+        new("Dark Mode", "dark")
+    ];
 
     private List<CarShowEntryDto> myEntries = [];
     private List<CarShowAnswerDto> myAnswers = [];
@@ -187,6 +207,7 @@ else
     private string? successMessage;
     private bool isBusy;
     private int selectedTabIndex;
+    private string selectedTheme = "system";
 
     private string? resetRequestUsername;
     private string? resetRequestEmail;
@@ -202,8 +223,15 @@ else
             return;
         }
 
+        selectedTheme = AppThemeService.Preference;
         LoadProfileForm();
         await LoadHistoryAsync();
+    }
+
+    private async Task OnThemeChangedAsync(object? value)
+    {
+        selectedTheme = AppThemeService.Normalize(value?.ToString());
+        await AppThemeService.SetPreferenceAsync(selectedTheme);
     }
 
     private void LoadProfileForm()
@@ -366,6 +394,8 @@ else
     private static string Display(int? value) => value?.ToString() ?? "-";
 
     private static string DisplayDateTime(DateTimeOffset? value) => value?.ToLocalTime().ToString("MMM dd, yyyy h:mm tt") ?? "-";
+
+    private sealed record ThemeOption(string Label, string Value);
 
     private sealed class ProfileFormModel
     {

@@ -1,66 +1,126 @@
 ﻿@inject UserSessionService UserSession
+@inject NavigationManager Navigation
 @implements IDisposable
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">Shrine ACU Portal</a>
-    </div>
-</div>
-
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
-
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+<div class="main-nav">
+    <div class="top-row ps-3 navbar navbar-dark">
+        <div class="container-fluid">
+            <NavLink class="navbar-brand" href="" Match="NavLinkMatch.All">
+                <img class="navbar-logo" src="/Icons/png_shrine_logo_transparent.png" alt="Shrine logo" />
             </NavLink>
-        </div>
 
-        @if (!UserSession.IsAuthenticated)
-        {
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="fetch-login">
-                    <span class="bi bi-person-circle" aria-hidden="true"></span> Login
-                </NavLink>
+            <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+            <div class="nav-scrollable">
+                <nav class="nav">
+                    <div class="nav-item px-3">
+                        <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                            <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                        </NavLink>
+                    </div>
+
+                    @if (!UserSession.IsAuthenticated)
+                    {
+                        <div class="nav-item px-3">
+                            <NavLink class="nav-link" href="fetch-login">
+                                Login
+                            </NavLink>
+                        </div>
+                    }
+                    else
+                    {
+                        @if (UserSession.CanRead)
+                        {
+                            <div class="nav-item px-3">
+                                <NavLink class="nav-link" href="fetch-carshows">
+                                    Car Shows
+                                </NavLink>
+                            </div>
+                        }
+
+                        @if (UserSession.CanWrite)
+                        {
+                            <div class="nav-item px-3">
+                                <NavLink class="nav-link" href="fetch-signup">
+                                    Signup
+                                </NavLink>
+                            </div>
+                        }
+
+                        @if (UserSession.CanAccessScoring)
+                        {
+                            <div class="nav-item px-3">
+                                <NavLink class="nav-link" href="fetch-scoring">
+                                    Scoring
+                                </NavLink>
+                            </div>
+                        }
+                    }
+                </nav>
+
+                <div class="navbar-extras">
+                    <a class="about-link" href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+
+                    @if (UserSession.IsAuthenticated)
+                    {
+                        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                            @if (UserSession.CanManageUsers)
+                            {
+                                <RadzenDropDown TValue="int?"
+                                                Data="@UserSession.AvailableUsers"
+                                                TextProperty="DisplayName"
+                                                ValueProperty="UserId"
+                                                Value="@UserSession.EffectiveUserId"
+                                                Change="OnEffectiveUserChanged"
+                                                Style="min-width:180px;"
+                                                Placeholder="Acting user" />
+                            }
+                            <RadzenButton Text="@DisplayUser(UserSession.CurrentUser)" Icon="person" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="NavigateToProfile" />
+                            <RadzenButton Text="Logout" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Secondary" Click="LogoutAsync" />
+                        </RadzenStack>
+                    }
+                </div>
             </div>
-        }
-        else
-        {
-            @if (UserSession.CanRead)
-            {
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="fetch-carshows">
-                        <span class="bi bi-car-front" aria-hidden="true"></span> Car Shows
-                    </NavLink>
-                </div>
-            }
-
-            @if (UserSession.CanWrite)
-            {
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="fetch-signup">
-                        <span class="bi bi-person-plus" aria-hidden="true"></span> Signup
-                    </NavLink>
-                </div>
-            }
-
-            @if (UserSession.CanAccessScoring)
-            {
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="fetch-scoring">
-                        <span class="bi bi-clipboard-check" aria-hidden="true"></span> Scoring
-                    </NavLink>
-                </div>
-            }
-        }
-    </nav>
+        </div>
+    </div>
 </div>
 
 @code {
     protected override void OnInitialized()
     {
         UserSession.StateChanged += HandleSessionChanged;
+    }
+
+    private void OnEffectiveUserChanged(object? value)
+    {
+        UserSession.SetEffectiveUser(value as int?);
+    }
+
+    private void NavigateToProfile()
+    {
+        Navigation.NavigateTo("/profile");
+    }
+
+    private async Task LogoutAsync()
+    {
+        await UserSession.LogoutAsync();
+        Navigation.NavigateTo("/fetch-login", forceLoad: false);
+    }
+
+    private static string DisplayUser(AppUserDto? user)
+    {
+        if (!string.IsNullOrWhiteSpace(user?.DisplayName))
+        {
+            return user!.DisplayName!;
+        }
+
+        var fullName = string.Join(' ', new[] { user?.FirstName, user?.LastName }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
+        if (!string.IsNullOrWhiteSpace(fullName))
+        {
+            return fullName;
+        }
+
+        return user?.Username ?? "-";
     }
 
     private void HandleSessionChanged() => InvokeAsync(StateHasChanged);

@@ -6,10 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <ResourcePreloader />
+    <script src="@Assets["theme.js"]"></script>
+    <script>window.shrineTheme?.init();</script>
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["Shrine_ACU_Web_Application.styles.css"]" />
-    <link rel="stylesheet" href="_content/Radzen.Blazor/css/material-base.css" />
+    <link id="radzen-theme"
+          rel="stylesheet"
+          href="_content/Radzen.Blazor/css/material-base.css"
+          data-light-href="_content/Radzen.Blazor/css/material-base.css"
+          data-dark-href="_content/Radzen.Blazor/css/material-dark-base.css" />
     <ImportMap />
     <link rel="icon" type="image/png" href="Icons/png_shrine_logo_transparent.png" />
     <link rel="shortcut icon" type="image/png" href="Icons/png_shrine_logo_transparent.png" />
