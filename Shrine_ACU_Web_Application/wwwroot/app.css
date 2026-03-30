@@ -1,6 +1,6 @@
 :root {
-    --layout-content-max-width: min(50vw, 1200px);
-    --layout-content-padding-inline: 1.25rem;
+    --layout-content-max-width: 1200px;
+    --layout-content-padding-inline: clamp(0.75rem, 1.5vw, 1.25rem);
     --app-bg: #ffffff;
     --app-text: #1f1f1f;
     --app-link: #006bb7;
@@ -19,7 +19,7 @@
 @media (max-width: 1200px) {
     :root {
         --layout-content-max-width: 100%;
-        --layout-content-padding-inline: 1rem;
+        --layout-content-padding-inline: clamp(0.75rem, 1.25vw, 1rem);
     }
 }
 

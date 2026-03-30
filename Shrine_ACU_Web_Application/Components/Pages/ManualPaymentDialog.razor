@@ -1,0 +1,165 @@
+@inject DialogService DialogService
+
+<RadzenStack Gap="1rem" Style="min-width:420px;max-width:560px;">
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+    }
+
+    <RadzenText TextStyle="TextStyle.Body2">
+        Entry: <b>@Entry?.EntryNumber</b> | VIN: <b>@Display(Entry?.Vin)</b>
+    </RadzenText>
+
+    <RadzenFormField Text="Payment status" Variant="Variant.Outlined" Style="width:100%;">
+        <RadzenDropDown TValue="string"
+                        Data="@paymentStatusOptions"
+                        TextProperty="Label"
+                        ValueProperty="Value"
+                        @bind-Value="model.PaymentStatus"
+                        Style="width:100%;" />
+    </RadzenFormField>
+
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenFormField Text="Payment timing" Variant="Variant.Outlined" Style="width:100%;">
+                <RadzenDropDown TValue="string"
+                                Data="@paymentTimingOptions"
+                                TextProperty="Label"
+                                ValueProperty="Value"
+                                @bind-Value="model.PaymentTiming"
+                                Style="width:100%;" />
+            </RadzenFormField>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenFormField Text="Payment method" Variant="Variant.Outlined" Style="width:100%;">
+                <RadzenDropDown TValue="string"
+                                Data="@paymentMethodOptions"
+                                TextProperty="Label"
+                                ValueProperty="Value"
+                                @bind-Value="model.PreferredPaymentMethod"
+                                AllowClear="true"
+                                Style="width:100%;" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenFormField Text="Paid amount" Variant="Variant.Outlined" Style="width:100%;">
+                <RadzenNumeric TValue="double?" @bind-Value="model.PaidAmount" Min="0" Step="1" Style="width:100%;" />
+            </RadzenFormField>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenFormField Text="Proof / receipt reference" Variant="Variant.Outlined" Style="width:100%;">
+                <RadzenTextBox @bind-Value="model.PaymentProofReference" Style="width:100%;" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenFormField Text="Reason" Variant="Variant.Outlined" Style="width:100%;">
+                <RadzenTextBox @bind-Value="model.Reason" Style="width:100%;" />
+            </RadzenFormField>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenFormField Text="Notes" Variant="Variant.Outlined" Style="width:100%;">
+                <RadzenTextArea @bind-Value="model.Notes" Style="width:100%;" Rows="2" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="Cancel" Disabled="isBusy" />
+        <RadzenButton Text="Save Payment" ButtonStyle="ButtonStyle.Primary" Click="Submit" Disabled="isBusy" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter]
+    public CarShowEntryDto? Entry { get; set; }
+
+    [Parameter]
+    public CarShowEntryPaymentDto? Payment { get; set; }
+
+    private readonly IReadOnlyList<SelectionOption> paymentStatusOptions =
+    [
+        new("Pending", "Pending"),
+        new("Paid", "Paid"),
+        new("Waived", "Waived"),
+        new("Refunded", "Refunded")
+    ];
+
+    private readonly IReadOnlyList<SelectionOption> paymentTimingOptions =
+    [
+        new("Pay online now", "PayOnlineNow"),
+        new("Pay later", "PayLater"),
+        new("Pay at event", "PayAtEvent")
+    ];
+
+    private readonly IReadOnlyList<SelectionOption> paymentMethodOptions =
+    [
+        new("Cash App Pay", "CashAppPay"),
+        new("Venmo", "Venmo"),
+        new("Apple Pay", "ApplePay"),
+        new("Google Pay", "GooglePay"),
+        new("Cash", "Cash")
+    ];
+
+    private CarShowEntryManualPaymentUpdateDto model = new();
+    private string? errorMessage;
+    private bool isBusy;
+
+    protected override void OnInitialized()
+    {
+        model = new CarShowEntryManualPaymentUpdateDto
+        {
+            PaymentStatus = Payment?.PaymentStatus ?? Entry?.PaymentStatus ?? "Pending",
+            PaymentTiming = Payment?.PaymentTiming ?? Entry?.PaymentTiming ?? "PayLater",
+            PreferredPaymentMethod = Payment?.PreferredPaymentMethod ?? Entry?.PreferredPaymentMethod,
+            PaymentProofReference = Payment?.PaymentProofReference ?? Entry?.PaymentProofReference,
+            PaidAmount = Payment?.PaidAmount ?? Entry?.PaidAmount,
+            RowVersion = Payment?.RowVersion
+        };
+    }
+
+    private void Submit()
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(model.RowVersion))
+        {
+            errorMessage = "Row version is required. Refresh payment details and try again.";
+            return;
+        }
+
+        if (string.Equals(model.PaymentStatus, "Paid", StringComparison.Ordinal))
+        {
+            if (!model.PaidAmount.HasValue || model.PaidAmount <= 0)
+            {
+                errorMessage = "Paid amount is required when status is Paid.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(model.PaymentProofReference))
+            {
+                errorMessage = "Proof / receipt reference is required when status is Paid.";
+                return;
+            }
+        }
+
+        DialogService.Close(model);
+    }
+
+    private void Cancel()
+    {
+        DialogService.Close(null);
+    }
+
+    private static string Display(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "-" : value;
+    }
+
+    private sealed record SelectionOption(string Label, string Value);
+}

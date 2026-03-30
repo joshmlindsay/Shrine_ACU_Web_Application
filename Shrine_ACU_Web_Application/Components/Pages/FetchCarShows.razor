@@ -22,6 +22,11 @@ else
         <RadzenText TextStyle="TextStyle.H4">Car Show Browser</RadzenText>
         <RadzenText TextStyle="TextStyle.Caption">Acting user: @UserSession.EffectiveDisplayName</RadzenText>
 
+        @if (!string.IsNullOrWhiteSpace(successMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Success">@successMessage</RadzenAlert>
+        }
+
         <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
             <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
                 <RadzenFormField Text="Select Car Show" Variant="Variant.Outlined" Style="width:100%;">
@@ -69,6 +74,11 @@ else
                 <Columns>
                     <RadzenDataGridColumn TItem="CarShowEntryDto" Property="EntryNumber" Title="#" Width="80px" />
                     <RadzenDataGridColumn TItem="CarShowEntryDto" Property="Vin" Title="VIN" Width="220px" />
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="PaymentStatus" Title="Payment" Width="130px" />
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="PreferredPaymentMethod" Title="Method" Width="150px" />
+                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Paid At" Width="140px">
+                        <Template Context="entry">@DisplayDate(entry.PaidAtUtc)</Template>
+                    </RadzenDataGridColumn>
                     <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Year">
                         <Template Context="entry">@Display(entry.CarDetail?.Year)</Template>
                     </RadzenDataGridColumn>
@@ -86,6 +96,14 @@ else
                             <RadzenButton Text="Details" Size="ButtonSize.Small" Click="@(async _ => await OpenDetails(entry))" />
                         </Template>
                     </RadzenDataGridColumn>
+                    @if (UserSession.CanManage)
+                    {
+                        <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Payment Action" Sortable="false" Filterable="false" Width="150px">
+                            <Template Context="entry">
+                                <RadzenButton Text="Mark Payment" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Primary" Click="@(async _ => await OpenManualPaymentDialogAsync(entry))" Disabled="@(isLoading || !entry.EntryId.HasValue)" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    }
                 </Columns>
             </RadzenDataGrid>
         }
@@ -99,6 +117,7 @@ else
     private int? selectedShowId;
     private bool isLoading;
     private string? errorMessage;
+    private string? successMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -208,6 +227,124 @@ else
                 Resizable = true,
                 Draggable = true
             });
+    }
+
+    private async Task OpenManualPaymentDialogAsync(CarShowEntryDto entry)
+    {
+        if (!entry.EntryId.HasValue)
+        {
+            errorMessage = "Unable to update payment because entry id is missing.";
+            return;
+        }
+
+        errorMessage = null;
+        successMessage = null;
+
+        CarShowEntryPaymentDto? paymentDetails;
+        try
+        {
+            paymentDetails = await Client.Api.CarShowEntries[entry.EntryId.Value].Payment.GetAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load current payment details for entry #{entry.EntryNumber ?? entry.EntryId}. {ex.Message}";
+            return;
+        }
+
+        var result = await DialogService.OpenAsync<ManualPaymentDialog>(
+            "Manual Payment Update",
+            new Dictionary<string, object?>
+            {
+                { nameof(ManualPaymentDialog.Entry), entry },
+                { nameof(ManualPaymentDialog.Payment), paymentDetails }
+            },
+            new DialogOptions
+            {
+                Width = "640px",
+                CloseDialogOnEsc = true,
+                CloseDialogOnOverlayClick = false
+            });
+
+        if (result is not CarShowEntryManualPaymentUpdateDto update)
+        {
+            return;
+        }
+
+        try
+        {
+            var updated = await Client.Api.CarShowEntries[entry.EntryId.Value].Payment.Manual.PutAsync(update);
+
+            if (updated is not null)
+            {
+                entry.PaymentStatus = updated.PaymentStatus;
+                entry.PaymentTiming = updated.PaymentTiming;
+                entry.PreferredPaymentMethod = updated.PreferredPaymentMethod;
+                entry.PaymentProofReference = updated.PaymentProofReference;
+                entry.PaidAmount = updated.PaidAmount;
+                entry.PaidAtUtc = updated.PaidAtUtc;
+                entry.PaidByUserId = updated.PaidByUserId;
+                entry.PaymentProvider = updated.PaymentProvider;
+                entry.PaymentProviderSessionId = updated.PaymentProviderSessionId;
+                entry.PaymentProviderIntentId = updated.PaymentProviderIntentId;
+            }
+
+            successMessage = $"Payment updated for entry #{entry.EntryNumber ?? entry.EntryId}.";
+        }
+        catch (Exception ex)
+        {
+            if (IsConcurrencyConflict(ex))
+            {
+                await RefreshEntryPaymentSnapshotAsync(entry);
+                errorMessage = $"Payment update conflict detected for entry #{entry.EntryNumber ?? entry.EntryId}. The record was updated by another user. Latest payment data has been reloaded. Please review and submit again.";
+                return;
+            }
+
+            errorMessage = $"Unable to update payment for entry #{entry.EntryNumber ?? entry.EntryId}. {ex.Message}";
+        }
+    }
+
+    private async Task RefreshEntryPaymentSnapshotAsync(CarShowEntryDto entry)
+    {
+        if (!entry.EntryId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var refreshed = await Client.Api.CarShowEntries[entry.EntryId.Value].Payment.GetAsync();
+            if (refreshed is null)
+            {
+                return;
+            }
+
+            entry.PaymentStatus = refreshed.PaymentStatus;
+            entry.PaymentTiming = refreshed.PaymentTiming;
+            entry.PreferredPaymentMethod = refreshed.PreferredPaymentMethod;
+            entry.PaymentProofReference = refreshed.PaymentProofReference;
+            entry.PaidAmount = refreshed.PaidAmount;
+            entry.PaidAtUtc = refreshed.PaidAtUtc;
+            entry.PaidByUserId = refreshed.PaidByUserId;
+            entry.PaymentProvider = refreshed.PaymentProvider;
+            entry.PaymentProviderSessionId = refreshed.PaymentProviderSessionId;
+            entry.PaymentProviderIntentId = refreshed.PaymentProviderIntentId;
+        }
+        catch
+        {
+        }
+    }
+
+    private static bool IsConcurrencyConflict(Exception ex)
+    {
+        if (string.IsNullOrWhiteSpace(ex.Message))
+        {
+            return false;
+        }
+
+        return ex.Message.Contains("409", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("concurrency", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("rowversion", StringComparison.OrdinalIgnoreCase)
+            || ex.Message.Contains("row version", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string Display(string? value)

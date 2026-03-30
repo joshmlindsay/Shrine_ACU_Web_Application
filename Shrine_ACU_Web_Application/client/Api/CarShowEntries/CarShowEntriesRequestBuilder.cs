@@ -50,27 +50,27 @@ namespace AcuCarShowClient.Api.CarShowEntries
         }
         /// <summary>Gets an item from the AcuCarShowClient.api.CarShowEntries.item collection</summary>
         /// <param name="position">Unique identifier of the item</param>
-        /// <returns>A <see cref="global::AcuCarShowClient.Api.CarShowEntries.Item.CarShowEntriesItemRequestBuilder"/></returns>
-        public global::AcuCarShowClient.Api.CarShowEntries.Item.CarShowEntriesItemRequestBuilder this[int position]
+        /// <returns>A <see cref="global::AcuCarShowClient.Api.CarShowEntries.Item.EntryItemRequestBuilder"/></returns>
+        public global::AcuCarShowClient.Api.CarShowEntries.Item.EntryItemRequestBuilder this[int position]
         {
             get
             {
                 var urlTplParams = new Dictionary<string, object>(PathParameters);
-                urlTplParams.Add("id", position);
-                return new global::AcuCarShowClient.Api.CarShowEntries.Item.CarShowEntriesItemRequestBuilder(urlTplParams, RequestAdapter);
+                urlTplParams.Add("entry%2Did", position);
+                return new global::AcuCarShowClient.Api.CarShowEntries.Item.EntryItemRequestBuilder(urlTplParams, RequestAdapter);
             }
         }
         /// <summary>Gets an item from the AcuCarShowClient.api.CarShowEntries.item collection</summary>
         /// <param name="position">Unique identifier of the item</param>
-        /// <returns>A <see cref="global::AcuCarShowClient.Api.CarShowEntries.Item.CarShowEntriesItemRequestBuilder"/></returns>
+        /// <returns>A <see cref="global::AcuCarShowClient.Api.CarShowEntries.Item.EntryItemRequestBuilder"/></returns>
         [Obsolete("This indexer is deprecated and will be removed in the next major version. Use the one with the typed parameter instead.")]
-        public global::AcuCarShowClient.Api.CarShowEntries.Item.CarShowEntriesItemRequestBuilder this[string position]
+        public global::AcuCarShowClient.Api.CarShowEntries.Item.EntryItemRequestBuilder this[string position]
         {
             get
             {
                 var urlTplParams = new Dictionary<string, object>(PathParameters);
-                if (!string.IsNullOrWhiteSpace(position)) urlTplParams.Add("id", position);
-                return new global::AcuCarShowClient.Api.CarShowEntries.Item.CarShowEntriesItemRequestBuilder(urlTplParams, RequestAdapter);
+                if (!string.IsNullOrWhiteSpace(position)) urlTplParams.Add("entry%2Did", position);
+                return new global::AcuCarShowClient.Api.CarShowEntries.Item.EntryItemRequestBuilder(urlTplParams, RequestAdapter);
             }
         }
         /// <summary>

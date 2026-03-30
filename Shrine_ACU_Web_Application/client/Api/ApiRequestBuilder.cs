@@ -16,6 +16,7 @@ using AcuCarShowClient.Api.CarShowQuestionCalculationGroups;
 using AcuCarShowClient.Api.CarShowScoreCalculations;
 using AcuCarShowClient.Api.CarShowScoringQuestions;
 using AcuCarShowClient.Api.CarShows;
+using AcuCarShowClient.Api.Payments;
 using AcuCarShowClient.Api.UserApplicationAccess;
 using Microsoft.Kiota.Abstractions.Extensions;
 using Microsoft.Kiota.Abstractions;
@@ -110,6 +111,11 @@ namespace AcuCarShowClient.Api
         public global::AcuCarShowClient.Api.CarShowScoringQuestions.CarShowScoringQuestionsRequestBuilder CarShowScoringQuestions
         {
             get => new global::AcuCarShowClient.Api.CarShowScoringQuestions.CarShowScoringQuestionsRequestBuilder(PathParameters, RequestAdapter);
+        }
+        /// <summary>The payments property</summary>
+        public global::AcuCarShowClient.Api.Payments.PaymentsRequestBuilder Payments
+        {
+            get => new global::AcuCarShowClient.Api.Payments.PaymentsRequestBuilder(PathParameters, RequestAdapter);
         }
         /// <summary>The UserApplicationAccess property</summary>
         public global::AcuCarShowClient.Api.UserApplicationAccess.UserApplicationAccessRequestBuilder UserApplicationAccess

@@ -9,57 +9,11 @@ namespace AcuCarShowClient.Models
 {
     [global::System.CodeDom.Compiler.GeneratedCode("Kiota", "1.0.0")]
     #pragma warning disable CS1591
-    public partial class CarShowEntryDto : IParsable
+    public partial class CarShowEntryPaymentDto : IParsable
     #pragma warning restore CS1591
     {
-        /// <summary>The answers property</summary>
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
-#nullable enable
-        public List<global::AcuCarShowClient.Models.CarShowAnswerDto>? Answers { get; set; }
-#nullable restore
-#else
-        public List<global::AcuCarShowClient.Models.CarShowAnswerDto> Answers { get; set; }
-#endif
-        /// <summary>The carDetail property</summary>
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
-#nullable enable
-        public global::AcuCarShowClient.Models.CarDetailDto? CarDetail { get; set; }
-#nullable restore
-#else
-        public global::AcuCarShowClient.Models.CarDetailDto CarDetail { get; set; }
-#endif
-        /// <summary>The category property</summary>
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
-#nullable enable
-        public string? Category { get; set; }
-#nullable restore
-#else
-        public string Category { get; set; }
-#endif
-        /// <summary>The classId property</summary>
-        public int? ClassId { get; set; }
         /// <summary>The entryId property</summary>
         public int? EntryId { get; set; }
-        /// <summary>The entryNumber property</summary>
-        public int? EntryNumber { get; set; }
-        /// <summary>The finalScores property</summary>
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
-#nullable enable
-        public List<global::AcuCarShowClient.Models.CarShowFinalScoreDto>? FinalScores { get; set; }
-#nullable restore
-#else
-        public List<global::AcuCarShowClient.Models.CarShowFinalScoreDto> FinalScores { get; set; }
-#endif
-        /// <summary>The judgeScore property</summary>
-        public double? JudgeScore { get; set; }
-        /// <summary>The notes property</summary>
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
-#nullable enable
-        public string? Notes { get; set; }
-#nullable restore
-#else
-        public string Notes { get; set; }
-#endif
         /// <summary>The paidAmount property</summary>
         public double? PaidAmount { get; set; }
         /// <summary>The paidAtUtc property</summary>
@@ -114,14 +68,6 @@ namespace AcuCarShowClient.Models
 #else
         public string PaymentTiming { get; set; }
 #endif
-        /// <summary>The placement property</summary>
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
-#nullable enable
-        public string? Placement { get; set; }
-#nullable restore
-#else
-        public string Placement { get; set; }
-#endif
         /// <summary>The preferredPaymentMethod property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
@@ -130,37 +76,23 @@ namespace AcuCarShowClient.Models
 #else
         public string PreferredPaymentMethod { get; set; }
 #endif
-        /// <summary>The registrationDate property</summary>
-        public DateTimeOffset? RegistrationDate { get; set; }
-        /// <summary>The showId property</summary>
-        public int? ShowId { get; set; }
-        /// <summary>The status property</summary>
+        /// <summary>The rowVersion property</summary>
 #if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
 #nullable enable
-        public string? Status { get; set; }
+        public string? RowVersion { get; set; }
 #nullable restore
 #else
-        public string Status { get; set; }
-#endif
-        /// <summary>The submittedByUserId property</summary>
-        public int? SubmittedByUserId { get; set; }
-        /// <summary>The vin property</summary>
-#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP3_1_OR_GREATER
-#nullable enable
-        public string? Vin { get; set; }
-#nullable restore
-#else
-        public string Vin { get; set; }
+        public string RowVersion { get; set; }
 #endif
         /// <summary>
         /// Creates a new instance of the appropriate class based on discriminator value
         /// </summary>
-        /// <returns>A <see cref="global::AcuCarShowClient.Models.CarShowEntryDto"/></returns>
+        /// <returns>A <see cref="global::AcuCarShowClient.Models.CarShowEntryPaymentDto"/></returns>
         /// <param name="parseNode">The parse node to use to read the discriminator value and create the object</param>
-        public static global::AcuCarShowClient.Models.CarShowEntryDto CreateFromDiscriminatorValue(IParseNode parseNode)
+        public static global::AcuCarShowClient.Models.CarShowEntryPaymentDto CreateFromDiscriminatorValue(IParseNode parseNode)
         {
             if(ReferenceEquals(parseNode, null)) throw new ArgumentNullException(nameof(parseNode));
-            return new global::AcuCarShowClient.Models.CarShowEntryDto();
+            return new global::AcuCarShowClient.Models.CarShowEntryPaymentDto();
         }
         /// <summary>
         /// The deserialization information for the current model
@@ -170,15 +102,7 @@ namespace AcuCarShowClient.Models
         {
             return new Dictionary<string, Action<IParseNode>>
             {
-                { "answers", n => { Answers = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowAnswerDto>(global::AcuCarShowClient.Models.CarShowAnswerDto.CreateFromDiscriminatorValue)?.AsList(); } },
-                { "carDetail", n => { CarDetail = n.GetObjectValue<global::AcuCarShowClient.Models.CarDetailDto>(global::AcuCarShowClient.Models.CarDetailDto.CreateFromDiscriminatorValue); } },
-                { "category", n => { Category = n.GetStringValue(); } },
-                { "classId", n => { ClassId = n.GetIntValue(); } },
                 { "entryId", n => { EntryId = n.GetIntValue(); } },
-                { "entryNumber", n => { EntryNumber = n.GetIntValue(); } },
-                { "finalScores", n => { FinalScores = n.GetCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowFinalScoreDto>(global::AcuCarShowClient.Models.CarShowFinalScoreDto.CreateFromDiscriminatorValue)?.AsList(); } },
-                { "judgeScore", n => { JudgeScore = n.GetDoubleValue(); } },
-                { "notes", n => { Notes = n.GetStringValue(); } },
                 { "paidAmount", n => { PaidAmount = n.GetDoubleValue(); } },
                 { "paidAtUtc", n => { PaidAtUtc = n.GetDateTimeOffsetValue(); } },
                 { "paidByUserId", n => { PaidByUserId = n.GetIntValue(); } },
@@ -188,13 +112,8 @@ namespace AcuCarShowClient.Models
                 { "paymentProviderSessionId", n => { PaymentProviderSessionId = n.GetStringValue(); } },
                 { "paymentStatus", n => { PaymentStatus = n.GetStringValue(); } },
                 { "paymentTiming", n => { PaymentTiming = n.GetStringValue(); } },
-                { "placement", n => { Placement = n.GetStringValue(); } },
                 { "preferredPaymentMethod", n => { PreferredPaymentMethod = n.GetStringValue(); } },
-                { "registrationDate", n => { RegistrationDate = n.GetDateTimeOffsetValue(); } },
-                { "showId", n => { ShowId = n.GetIntValue(); } },
-                { "status", n => { Status = n.GetStringValue(); } },
-                { "submittedByUserId", n => { SubmittedByUserId = n.GetIntValue(); } },
-                { "vin", n => { Vin = n.GetStringValue(); } },
+                { "rowVersion", n => { RowVersion = n.GetStringValue(); } },
             };
         }
         /// <summary>
@@ -204,15 +123,7 @@ namespace AcuCarShowClient.Models
         public virtual void Serialize(ISerializationWriter writer)
         {
             if(ReferenceEquals(writer, null)) throw new ArgumentNullException(nameof(writer));
-            writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowAnswerDto>("answers", Answers);
-            writer.WriteObjectValue<global::AcuCarShowClient.Models.CarDetailDto>("carDetail", CarDetail);
-            writer.WriteStringValue("category", Category);
-            writer.WriteIntValue("classId", ClassId);
             writer.WriteIntValue("entryId", EntryId);
-            writer.WriteIntValue("entryNumber", EntryNumber);
-            writer.WriteCollectionOfObjectValues<global::AcuCarShowClient.Models.CarShowFinalScoreDto>("finalScores", FinalScores);
-            writer.WriteDoubleValue("judgeScore", JudgeScore);
-            writer.WriteStringValue("notes", Notes);
             writer.WriteDoubleValue("paidAmount", PaidAmount);
             writer.WriteDateTimeOffsetValue("paidAtUtc", PaidAtUtc);
             writer.WriteIntValue("paidByUserId", PaidByUserId);
@@ -222,13 +133,8 @@ namespace AcuCarShowClient.Models
             writer.WriteStringValue("paymentProviderSessionId", PaymentProviderSessionId);
             writer.WriteStringValue("paymentStatus", PaymentStatus);
             writer.WriteStringValue("paymentTiming", PaymentTiming);
-            writer.WriteStringValue("placement", Placement);
             writer.WriteStringValue("preferredPaymentMethod", PreferredPaymentMethod);
-            writer.WriteDateTimeOffsetValue("registrationDate", RegistrationDate);
-            writer.WriteIntValue("showId", ShowId);
-            writer.WriteStringValue("status", Status);
-            writer.WriteIntValue("submittedByUserId", SubmittedByUserId);
-            writer.WriteStringValue("vin", Vin);
+            writer.WriteStringValue("rowVersion", RowVersion);
         }
     }
 }

@@ -1,0 +1,254 @@
+@page "/payment-return"
+@rendermode InteractiveServer
+
+@inject AcuCarShowClient Client
+@inject UserSessionService UserSession
+@inject NavigationManager Navigation
+@inject DialogService DialogService
+
+<PageTitle>Payment Status</PageTitle>
+
+@if (!UserSession.IsAuthenticated)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in to view payment status.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1rem">
+        <RadzenText TextStyle="TextStyle.H4">Payment Status</RadzenText>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(successMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Success">@successMessage</RadzenAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(infoMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Info">@infoMessage</RadzenAlert>
+        }
+
+        @if (isLoading)
+        {
+            <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+        }
+        else if (payment is not null)
+        {
+            <RadzenCard>
+                <RadzenStack Gap="0.5rem">
+                    <RadzenText><b>Entry ID:</b> @Display(payment.EntryId)</RadzenText>
+                    <RadzenText><b>Payment Status:</b> @Display(payment.PaymentStatus)</RadzenText>
+                    <RadzenText><b>Method:</b> @Display(payment.PreferredPaymentMethod)</RadzenText>
+                    <RadzenText><b>Provider:</b> @Display(payment.PaymentProvider)</RadzenText>
+                    <RadzenText><b>Amount:</b> @DisplayAmount(payment.PaidAmount)</RadzenText>
+                    <RadzenText><b>Paid At:</b> @DisplayDateTime(payment.PaidAtUtc)</RadzenText>
+                    <RadzenText><b>Proof:</b> @Display(payment.PaymentProofReference)</RadzenText>
+                </RadzenStack>
+            </RadzenCard>
+        }
+
+        <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+            @if (CanRetryPayment())
+            {
+                <RadzenButton Text="Retry Payment" Icon="payment" ButtonStyle="ButtonStyle.Primary" Click="RetryPaymentAsync" Disabled="isLaunchingCheckout" />
+            }
+            <RadzenButton Text="Refresh Status" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="LoadPaymentAsync" Disabled="isLoading || isLaunchingCheckout" />
+            <RadzenButton Text="Go to Profile" Icon="person" ButtonStyle="ButtonStyle.Primary" Click="GoToProfile" />
+            <RadzenButton Text="Back to Signup" Icon="assignment" ButtonStyle="ButtonStyle.Light" Click="GoToSignup" />
+        </RadzenStack>
+    </RadzenStack>
+}
+
+@code {
+    private const string PaymentMethodCashAppPay = "CashAppPay";
+    private const string PaymentMethodVenmo = "Venmo";
+    private const string PaymentMethodApplePay = "ApplePay";
+    private const string PaymentMethodGooglePay = "GooglePay";
+
+    [SupplyParameterFromQuery(Name = "entryId")]
+    public int? EntryId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "result")]
+    public string? Result { get; set; }
+
+    private CarShowEntryPaymentDto? payment;
+    private bool isLoading;
+    private bool isLaunchingCheckout;
+    private string? errorMessage;
+    private string? successMessage;
+    private string? infoMessage;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        errorMessage = null;
+        successMessage = null;
+        infoMessage = null;
+        payment = null;
+
+        if (!UserSession.IsAuthenticated)
+        {
+            Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString(Navigation.Uri)}", replace: true);
+            return;
+        }
+
+        if (!EntryId.HasValue)
+        {
+            errorMessage = "Entry id is missing from the return URL.";
+            return;
+        }
+
+        if (string.Equals(Result, "success", StringComparison.OrdinalIgnoreCase))
+        {
+            successMessage = "Payment flow completed. Verifying payment status...";
+        }
+        else if (string.Equals(Result, "cancel", StringComparison.OrdinalIgnoreCase))
+        {
+            successMessage = "Payment checkout was cancelled. You can complete payment later.";
+        }
+
+        await LoadPaymentAsync();
+    }
+
+    private async Task LoadPaymentAsync()
+    {
+        if (!EntryId.HasValue)
+        {
+            errorMessage = "Entry id is missing from the return URL.";
+            return;
+        }
+
+        isLoading = true;
+        infoMessage = null;
+
+        try
+        {
+            payment = await Client.Api.CarShowEntries[EntryId.Value].Payment.GetAsync();
+            if (payment is not null && !string.Equals(payment.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+            {
+                infoMessage = "Payment is still pending. Webhook updates can take a short moment. You can retry payment if needed.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load payment status. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private bool CanRetryPayment()
+    {
+        return EntryId.HasValue
+            && payment is not null
+            && !string.Equals(payment.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task RetryPaymentAsync()
+    {
+        if (!EntryId.HasValue)
+        {
+            errorMessage = "Entry id is missing from the return URL.";
+            return;
+        }
+
+        errorMessage = null;
+
+        var entry = await Client.Api.CarShowEntries[EntryId.Value].GetAsync();
+        if (entry is null)
+        {
+            errorMessage = "Unable to load entry for retry.";
+            return;
+        }
+
+        var result = await DialogService.OpenAsync<PayNowDialog>(
+            "Retry Payment",
+            new Dictionary<string, object?>
+            {
+                { nameof(PayNowDialog.Entry), entry }
+            },
+            new DialogOptions
+            {
+                Width = "520px",
+                CloseDialogOnEsc = true,
+                CloseDialogOnOverlayClick = false
+            });
+
+        if (result is not CarShowEntryPaymentSessionRequestDto sessionRequest)
+        {
+            return;
+        }
+
+        isLaunchingCheckout = true;
+
+        try
+        {
+            var baseUri = Navigation.BaseUri.TrimEnd('/');
+            sessionRequest.SuccessUrl = $"{baseUri}/payment-return?entryId={EntryId.Value}&result=success";
+            sessionRequest.CancelUrl = $"{baseUri}/payment-return?entryId={EntryId.Value}&result=cancel";
+            sessionRequest.PaymentProvider = ResolvePaymentProvider(sessionRequest.PreferredPaymentMethod ?? string.Empty);
+
+            var session = await Client.Api.CarShowEntries[EntryId.Value].Payment.Session.PostAsync(sessionRequest);
+            if (string.IsNullOrWhiteSpace(session?.CheckoutUrl))
+            {
+                errorMessage = "Unable to start payment checkout. Checkout URL was not returned.";
+                return;
+            }
+
+            Navigation.NavigateTo(session.CheckoutUrl, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to retry payment checkout. {ex.Message}";
+        }
+        finally
+        {
+            isLaunchingCheckout = false;
+        }
+    }
+
+    private static string ResolvePaymentProvider(string method)
+    {
+        return method switch
+        {
+            PaymentMethodVenmo => "Braintree",
+            PaymentMethodCashAppPay or PaymentMethodApplePay or PaymentMethodGooglePay => "Stripe",
+            _ => "Stripe"
+        };
+    }
+
+    private void GoToProfile()
+    {
+        Navigation.NavigateTo("/profile");
+    }
+
+    private void GoToSignup()
+    {
+        Navigation.NavigateTo("/fetch-signup");
+    }
+
+    private static string Display(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "-" : value;
+    }
+
+    private static string Display(int? value)
+    {
+        return value?.ToString() ?? "-";
+    }
+
+    private static string DisplayAmount(double? value)
+    {
+        return value.HasValue ? value.Value.ToString("C") : "-";
+    }
+
+    private static string DisplayDateTime(DateTimeOffset? value)
+    {
+        return value?.ToLocalTime().ToString("MMM dd, yyyy h:mm tt") ?? "-";
+    }
+}

@@ -1,0 +1,96 @@
+@inject DialogService DialogService
+
+<RadzenStack Gap="1rem" Style="min-width:380px;max-width:520px;">
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+    }
+
+    <RadzenText TextStyle="TextStyle.Body2">
+        Entry: <b>@(Entry?.EntryNumber?.ToString() ?? "-")</b> | VIN: <b>@Display(Entry?.Vin)</b>
+    </RadzenText>
+
+    <RadzenFormField Text="Payment method" Variant="Variant.Outlined" Style="width:100%;">
+        <RadzenDropDown TValue="string"
+                        Data="@paymentMethodOptions"
+                        TextProperty="Label"
+                        ValueProperty="Value"
+                        @bind-Value="preferredMethod"
+                        Style="width:100%;" />
+    </RadzenFormField>
+
+    <RadzenFormField Text="Amount" Variant="Variant.Outlined" Style="width:100%;">
+        <RadzenNumeric TValue="double?" @bind-Value="amount" Min="0" Step="1" Style="width:100%;" />
+    </RadzenFormField>
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="Cancel" />
+        <RadzenButton Text="Continue to Checkout" ButtonStyle="ButtonStyle.Primary" Click="Submit" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter]
+    public CarShowEntryDto? Entry { get; set; }
+
+    private readonly IReadOnlyList<SelectionOption> paymentMethodOptions =
+    [
+        new("Cash App Pay", "CashAppPay"),
+        new("Venmo", "Venmo"),
+        new("Apple Pay", "ApplePay"),
+        new("Google Pay (Android)", "GooglePay")
+    ];
+
+    private string preferredMethod = "CashAppPay";
+    private double? amount;
+    private string? errorMessage;
+
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrWhiteSpace(Entry?.PreferredPaymentMethod)
+            && paymentMethodOptions.Any(x => string.Equals(x.Value, Entry.PreferredPaymentMethod, StringComparison.OrdinalIgnoreCase)))
+        {
+            preferredMethod = Entry.PreferredPaymentMethod!;
+        }
+
+        if (Entry?.PaidAmount > 0)
+        {
+            amount = Entry.PaidAmount;
+        }
+    }
+
+    private void Submit()
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(preferredMethod))
+        {
+            errorMessage = "Payment method is required.";
+            return;
+        }
+
+        if (!amount.HasValue || amount.Value <= 0)
+        {
+            errorMessage = "Amount is required.";
+            return;
+        }
+
+        DialogService.Close(new CarShowEntryPaymentSessionRequestDto
+        {
+            Amount = amount.Value,
+            PreferredPaymentMethod = preferredMethod
+        });
+    }
+
+    private void Cancel()
+    {
+        DialogService.Close(null);
+    }
+
+    private static string Display(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "-" : value;
+    }
+
+    private sealed record SelectionOption(string Label, string Value);
+}

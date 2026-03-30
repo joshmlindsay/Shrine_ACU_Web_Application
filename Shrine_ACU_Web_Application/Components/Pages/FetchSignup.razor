@@ -128,7 +128,68 @@ else
                             </RadzenColumn>
                         </RadzenRow>
 
-                        <RadzenButton Text="Submit Signup" ButtonType="ButtonType.Submit" ButtonStyle="ButtonStyle.Primary" Icon="save" />
+                        <RadzenText TextStyle="TextStyle.H5">Payment Preference</RadzenText>
+
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="When will you pay?" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenDropDown Name="PaymentTiming"
+                                                    TValue="string"
+                                                    Data="@paymentTimingOptions"
+                                                    TextProperty="Label"
+                                                    ValueProperty="Value"
+                                                    Value="@form.PaymentTiming"
+                                                    Change="OnPaymentTimingChanged"
+                                                    Style="width:100%;" />
+                                </RadzenFormField>
+                                <RadzenRequiredValidator Component="PaymentTiming" Text="Payment timing is required" Popup="true" />
+                            </RadzenColumn>
+
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="Preferred payment method" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenDropDown Name="PaymentMethod"
+                                                    TValue="string"
+                                                    Data="@paymentMethodOptions"
+                                                    TextProperty="Label"
+                                                    ValueProperty="Value"
+                                                    @bind-Value="form.PaymentMethod"
+                                                    AllowClear="true"
+                                                    Placeholder="Select preferred method"
+                                                    Style="width:100%;" />
+                                </RadzenFormField>
+                                @if (RequiresOnlinePaymentMethod)
+                                {
+                                    <RadzenRequiredValidator Component="PaymentMethod" Text="Select a payment method when paying online now" Popup="true" />
+                                }
+                            </RadzenColumn>
+                        </RadzenRow>
+
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="Payment amount (optional)" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenNumeric TValue="double?" @bind-Value="form.PaymentAmount" Min="0" Step="1" Style="width:100%;" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="Payment confirmation / receipt #" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenTextBox @bind-Value="form.PaymentProofReference" Style="width:100%;" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                        </RadzenRow>
+
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="Payment notes for event manager" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenTextArea @bind-Value="form.PaymentNote" Style="width:100%;" Rows="2" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                        </RadzenRow>
+
+                        <RadzenButton Text="Submit Signup"
+                                      ButtonType="ButtonType.Submit"
+                                      ButtonStyle="ButtonStyle.Primary"
+                                      Icon="save"
+                                      Disabled="isSubmitting" />
                     </RadzenStack>
                 </RadzenCard>
             </RadzenTemplateForm>
@@ -137,17 +198,46 @@ else
 }
 
 @code {
+    private const string PaymentTimingPayOnlineNow = "PayOnlineNow";
+    private const string PaymentTimingPayLater = "PayLater";
+    private const string PaymentTimingPayAtEvent = "PayAtEvent";
+
+    private const string PaymentMethodCashAppPay = "CashAppPay";
+    private const string PaymentMethodVenmo = "Venmo";
+    private const string PaymentMethodApplePay = "ApplePay";
+    private const string PaymentMethodGooglePay = "GooglePay";
+    private const string PaymentMethodCash = "Cash";
+
     [Parameter]
     public int? ShowId { get; set; }
 
     [SupplyParameterFromQuery(Name = "carshowid")]
     public int? CarShowIdQuery { get; set; }
 
+    private readonly IReadOnlyList<SelectionOption> paymentTimingOptions =
+    [
+        new("Pay online now", PaymentTimingPayOnlineNow),
+        new("Pay later", PaymentTimingPayLater),
+        new("Pay at event (in person)", PaymentTimingPayAtEvent)
+    ];
+
+    private readonly IReadOnlyList<SelectionOption> paymentMethodOptions =
+    [
+        new("Cash App Pay", PaymentMethodCashAppPay),
+        new("Venmo", PaymentMethodVenmo),
+        new("Apple Pay", PaymentMethodApplePay),
+        new("Google Pay (Android)", PaymentMethodGooglePay),
+        new("Cash (in person)", PaymentMethodCash)
+    ];
+
     private List<CarShowDto> carShows = [];
     private SignupFormModel form = new();
     private bool isLoading = true;
+    private bool isSubmitting;
     private string? errorMessage;
     private string? successMessage;
+
+    private bool RequiresOnlinePaymentMethod => string.Equals(form.PaymentTiming, PaymentTimingPayOnlineNow, StringComparison.Ordinal);
 
     protected override async Task OnInitializedAsync()
     {
@@ -212,10 +302,32 @@ else
         }
     }
 
+    private void OnPaymentTimingChanged(object? value)
+    {
+        form.PaymentTiming = value?.ToString() ?? PaymentTimingPayLater;
+    }
+
     private async Task SubmitSignup(SignupFormModel _)
     {
         errorMessage = null;
         successMessage = null;
+
+        if (RequiresOnlinePaymentMethod)
+        {
+            if (!IsOnlinePaymentMethod(form.PaymentMethod))
+            {
+                errorMessage = "Select Cash App Pay, Venmo, Apple Pay, or Google Pay when paying online now.";
+                return;
+            }
+
+            if (!form.PaymentAmount.HasValue || form.PaymentAmount.Value <= 0)
+            {
+                errorMessage = "Payment amount is required when paying online now.";
+                return;
+            }
+        }
+
+        isSubmitting = true;
 
         try
         {
@@ -229,6 +341,12 @@ else
                 Status = "Pending",
                 RegistrationDate = DateTimeOffset.UtcNow,
                 SubmittedByUserId = UserSession.EffectiveUserId,
+                PaymentTiming = form.PaymentTiming,
+                PreferredPaymentMethod = form.PaymentMethod,
+                PaymentProofReference = NullIfWhiteSpace(form.PaymentProofReference),
+                PaidAmount = form.PaymentAmount,
+                PaymentStatus = "Pending",
+                PaymentProvider = ResolvePaymentProvider(form.PaymentMethod),
                 CarDetail = new CarDetailDto
                 {
                     Vin = form.Vin,
@@ -242,7 +360,39 @@ else
                 Notes = BuildContactNotes()
             };
 
-            await Client.Api.CarShowEntries.PostAsync(entry);
+            var createdEntry = await Client.Api.CarShowEntries.PostAsync(entry);
+
+            if (RequiresOnlinePaymentMethod)
+            {
+                if (createdEntry?.EntryId is not int entryId)
+                {
+                    successMessage = "Signup submitted, but payment session could not be started because entry id was not returned.";
+                    return;
+                }
+
+                var baseUri = Navigation.BaseUri.TrimEnd('/');
+                var successUrl = $"{baseUri}/payment-return?entryId={entryId}&result=success";
+                var cancelUrl = $"{baseUri}/payment-return?entryId={entryId}&result=cancel";
+
+                var sessionRequest = new CarShowEntryPaymentSessionRequestDto
+                {
+                    Amount = form.PaymentAmount,
+                    PaymentProvider = ResolvePaymentProvider(form.PaymentMethod),
+                    PreferredPaymentMethod = form.PaymentMethod,
+                    SuccessUrl = successUrl,
+                    CancelUrl = cancelUrl
+                };
+
+                var session = await Client.Api.CarShowEntries[entryId].Payment.Session.PostAsync(sessionRequest);
+                if (string.IsNullOrWhiteSpace(session?.CheckoutUrl))
+                {
+                    successMessage = "Signup submitted, but checkout URL was not returned. You can complete payment later.";
+                    return;
+                }
+
+                Navigation.NavigateTo(session.CheckoutUrl, forceLoad: true);
+                return;
+            }
 
             successMessage = "Signup submitted successfully.";
             form = new SignupFormModel
@@ -257,6 +407,26 @@ else
         {
             errorMessage = $"Unable to submit signup. {ex.Message}";
         }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private static bool IsOnlinePaymentMethod(string? paymentMethod)
+    {
+        return paymentMethod is PaymentMethodCashAppPay or PaymentMethodVenmo or PaymentMethodApplePay or PaymentMethodGooglePay;
+    }
+
+    private static string? ResolvePaymentProvider(string? paymentMethod)
+    {
+        return paymentMethod switch
+        {
+            PaymentMethodVenmo => "Braintree",
+            PaymentMethodCash => "Manual",
+            PaymentMethodCashAppPay or PaymentMethodApplePay or PaymentMethodGooglePay => "Stripe",
+            _ => null
+        };
     }
 
     private void PrefillFromEffectiveUser()
@@ -268,7 +438,24 @@ else
 
     private string BuildContactNotes()
     {
-        return $"Name: {form.FirstName} {form.LastName}; Email: {form.Email}; Phone: {form.Phone}";
+        var parts = new List<string>
+        {
+            $"Name: {form.FirstName} {form.LastName}".Trim(),
+            $"Email: {form.Email}",
+            $"Phone: {form.Phone}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(form.PaymentNote))
+        {
+            parts.Add($"PaymentNote: {form.PaymentNote}");
+        }
+
+        return string.Join("; ", parts.Where(x => !string.IsNullOrWhiteSpace(x)));
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private sealed class SignupFormModel
@@ -283,5 +470,12 @@ else
         public string? Model { get; set; }
         public string? Vin { get; set; }
         public string? Color { get; set; }
+        public string PaymentTiming { get; set; } = PaymentTimingPayLater;
+        public string? PaymentMethod { get; set; }
+        public double? PaymentAmount { get; set; }
+        public string? PaymentProofReference { get; set; }
+        public string? PaymentNote { get; set; }
     }
+
+    private sealed record SelectionOption(string Label, string Value);
 }
