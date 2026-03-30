@@ -164,26 +164,40 @@ else
                             </RadzenColumn>
                         </RadzenRow>
 
-                        <RadzenRow Gap="1rem">
-                            <RadzenColumn Size="12" SizeMD="6">
-                                <RadzenFormField Text="Payment amount (optional)" Variant="Variant.Outlined" Style="width:100%;">
-                                    <RadzenNumeric TValue="double?" @bind-Value="form.PaymentAmount" Min="0" Step="1" Style="width:100%;" />
-                                </RadzenFormField>
-                            </RadzenColumn>
-                            <RadzenColumn Size="12" SizeMD="6">
-                                <RadzenFormField Text="Payment confirmation / receipt #" Variant="Variant.Outlined" Style="width:100%;">
-                                    <RadzenTextBox @bind-Value="form.PaymentProofReference" Style="width:100%;" />
-                                </RadzenFormField>
-                            </RadzenColumn>
-                        </RadzenRow>
+                        @if (RequiresOnlinePaymentMethod)
+                        {
+                            <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">
+                                You will be redirected to a secure checkout page to complete payment after submitting. The entry fee will be applied at checkout.
+                            </RadzenAlert>
+                        }
 
-                        <RadzenRow Gap="1rem">
-                            <RadzenColumn Size="12" SizeMD="6">
-                                <RadzenFormField Text="Payment notes for event manager" Variant="Variant.Outlined" Style="width:100%;">
-                                    <RadzenTextArea @bind-Value="form.PaymentNote" Style="width:100%;" Rows="2" />
-                                </RadzenFormField>
-                            </RadzenColumn>
-                        </RadzenRow>
+                        @if (!RequiresOnlinePaymentMethod)
+                        {
+                            <RadzenRow Gap="1rem">
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Payment amount (optional)" Variant="Variant.Outlined" Style="width:100%;">
+                                        <RadzenNumeric TValue="double?" @bind-Value="form.PaymentAmount" Min="0" Step="1" Style="width:100%;" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+
+                                @if (ShowPaymentProofField)
+                                {
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Payment confirmation / receipt #" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextBox @bind-Value="form.PaymentProofReference" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                }
+                            </RadzenRow>
+
+                            <RadzenRow Gap="1rem">
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Payment notes for event manager" Variant="Variant.Outlined" Style="width:100%;">
+                                        <RadzenTextArea @bind-Value="form.PaymentNote" Style="width:100%;" Rows="2" />
+                                    </RadzenFormField>
+                                </RadzenColumn>
+                            </RadzenRow>
+                        }
 
                         <RadzenButton Text="Submit Signup"
                                       ButtonType="ButtonType.Submit"
@@ -238,6 +252,7 @@ else
     private string? successMessage;
 
     private bool RequiresOnlinePaymentMethod => string.Equals(form.PaymentTiming, PaymentTimingPayOnlineNow, StringComparison.Ordinal);
+    private bool ShowPaymentProofField => string.Equals(form.PaymentTiming, PaymentTimingPayLater, StringComparison.Ordinal);
 
     protected override async Task OnInitializedAsync()
     {
@@ -305,6 +320,18 @@ else
     private void OnPaymentTimingChanged(object? value)
     {
         form.PaymentTiming = value?.ToString() ?? PaymentTimingPayLater;
+
+        if (RequiresOnlinePaymentMethod)
+        {
+            form.PaymentAmount = null;
+            form.PaymentProofReference = null;
+            form.PaymentNote = null;
+        }
+
+        if (!ShowPaymentProofField)
+        {
+            form.PaymentProofReference = null;
+        }
     }
 
     private async Task SubmitSignup(SignupFormModel _)
@@ -328,6 +355,8 @@ else
         }
 
         isSubmitting = true;
+
+        CarShowEntryDto? createdEntry = null;
 
         try
         {
@@ -360,40 +389,17 @@ else
                 Notes = BuildContactNotes()
             };
 
-            var createdEntry = await Client.Api.CarShowEntries.PostAsync(entry);
+            createdEntry = await Client.Api.CarShowEntries.PostAsync(entry);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to submit signup. {ex.Message}";
+            isSubmitting = false;
+            return;
+        }
 
-            if (RequiresOnlinePaymentMethod)
-            {
-                if (createdEntry?.EntryId is not int entryId)
-                {
-                    successMessage = "Signup submitted, but payment session could not be started because entry id was not returned.";
-                    return;
-                }
-
-                var baseUri = Navigation.BaseUri.TrimEnd('/');
-                var successUrl = $"{baseUri}/payment-return?entryId={entryId}&result=success";
-                var cancelUrl = $"{baseUri}/payment-return?entryId={entryId}&result=cancel";
-
-                var sessionRequest = new CarShowEntryPaymentSessionRequestDto
-                {
-                    Amount = form.PaymentAmount,
-                    PaymentProvider = ResolvePaymentProvider(form.PaymentMethod),
-                    PreferredPaymentMethod = form.PaymentMethod,
-                    SuccessUrl = successUrl,
-                    CancelUrl = cancelUrl
-                };
-
-                var session = await Client.Api.CarShowEntries[entryId].Payment.Session.PostAsync(sessionRequest);
-                if (string.IsNullOrWhiteSpace(session?.CheckoutUrl))
-                {
-                    successMessage = "Signup submitted, but checkout URL was not returned. You can complete payment later.";
-                    return;
-                }
-
-                Navigation.NavigateTo(session.CheckoutUrl, forceLoad: true);
-                return;
-            }
-
+        if (!RequiresOnlinePaymentMethod)
+        {
             successMessage = "Signup submitted successfully.";
             form = new SignupFormModel
             {
@@ -402,13 +408,46 @@ else
                 LastName = UserSession.EffectiveUser?.LastName,
                 Email = UserSession.EffectiveUser?.Email
             };
+            isSubmitting = false;
+            return;
+        }
+
+        if (createdEntry?.EntryId is not int entryId)
+        {
+            successMessage = "Signup submitted, but payment session could not be started because entry id was not returned. You can complete payment from your profile.";
+            isSubmitting = false;
+            return;
+        }
+
+        try
+        {
+            var baseUri = Navigation.BaseUri.TrimEnd('/');
+            var successUrl = $"{baseUri}/payment-return?entryId={entryId}&result=success";
+            var cancelUrl = $"{baseUri}/payment-return?entryId={entryId}&result=cancel";
+
+            var sessionRequest = new CarShowEntryPaymentSessionRequestDto
+            {
+                Amount = null,
+                PaymentProvider = ResolvePaymentProvider(form.PaymentMethod),
+                PreferredPaymentMethod = form.PaymentMethod,
+                SuccessUrl = successUrl,
+                CancelUrl = cancelUrl
+            };
+
+            var session = await Client.Api.CarShowEntries[entryId].Payment.Session.PostAsync(sessionRequest);
+            if (string.IsNullOrWhiteSpace(session?.CheckoutUrl))
+            {
+                successMessage = $"Signup submitted (entry #{entryId}), but checkout URL was not returned. You can complete payment later from your profile.";
+                isSubmitting = false;
+                return;
+            }
+
+            Navigation.NavigateTo(session.CheckoutUrl, forceLoad: true);
         }
         catch (Exception ex)
         {
-            errorMessage = $"Unable to submit signup. {ex.Message}";
-        }
-        finally
-        {
+            successMessage = $"Signup submitted (entry #{entryId}), but payment checkout could not be started. You can complete payment later from your profile.";
+            errorMessage = $"Payment session error: {ex.Message}";
             isSubmitting = false;
         }
     }

@@ -50,9 +50,9 @@
         await UserSession.EnsureAdminUsersLoadedAsync();
         hasInitialized = true;
 
-        if (!UserSession.IsAuthenticated && !Navigation.Uri.Contains("/fetch-login"))
+        if (!UserSession.IsAuthenticated && !IsPublicRoute(Navigation.Uri))
         {
-            Navigation.NavigateTo("/fetch-login", replace: true);
+            Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri))}", replace: true);
             return;
         }
 
@@ -61,11 +61,17 @@
 
     protected override void OnParametersSet()
     {
-        if (hasInitialized && !UserSession.IsAuthenticated && !Navigation.Uri.Contains("/fetch-login"))
+        if (hasInitialized && !UserSession.IsAuthenticated && !IsPublicRoute(Navigation.Uri))
         {
-            Navigation.NavigateTo("/fetch-login", replace: true);
+            Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri))}", replace: true);
         }
     }
+
+    private static bool IsPublicRoute(string uri) =>
+        uri.Contains("/fetch-login", StringComparison.OrdinalIgnoreCase) ||
+        uri.Contains("/fetch-register", StringComparison.OrdinalIgnoreCase) ||
+        uri.Contains("/fetch-forgot-password", StringComparison.OrdinalIgnoreCase) ||
+        uri.Contains("/fetch-reset-password", StringComparison.OrdinalIgnoreCase);
 
     private void HandleStateChanged() => InvokeAsync(StateHasChanged);
 

@@ -27,6 +27,11 @@
                     </RadzenFormField>
 
                     <RadzenButton Text="Login" Icon="login" ButtonStyle="ButtonStyle.Primary" Disabled="isBusy" Click="HandleLoginAsync" Style="width:100%;" />
+
+                    <RadzenRow JustifyContent="JustifyContent.SpaceBetween">
+                        <RadzenText TextStyle="TextStyle.Body2">Don't have an account? <RadzenLink Path="@RegisterUrl" Text="Create one" /></RadzenText>
+                        <RadzenText TextStyle="TextStyle.Body2"><RadzenLink Path="/fetch-forgot-password" Text="Forgot password?" /></RadzenText>
+                    </RadzenRow>
                 }
             </RadzenStack>
         </RadzenCard>
@@ -41,6 +46,10 @@
     private string? password;
     private bool isBusy;
     private string? errorMessage;
+
+    private string RegisterUrl => string.IsNullOrWhiteSpace(ReturnUrl)
+        ? "/fetch-register"
+        : $"/fetch-register?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
 
     private async Task HandleLoginAsync()
     {

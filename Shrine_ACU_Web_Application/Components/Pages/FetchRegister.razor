@@ -1,0 +1,301 @@
+@page "/fetch-register"
+@rendermode InteractiveServer
+@inject AcuCarShowClient Client
+@inject NavigationManager Navigation
+@inject UserSessionService UserSession
+
+<PageTitle>Create Account</PageTitle>
+
+@if (registered)
+{
+    <RadzenRow JustifyContent="JustifyContent.Center" class="mt-5">
+        <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+            <RadzenCard>
+                <RadzenStack Gap="1rem" AlignItems="AlignItems.Center">
+                    <RadzenText TextStyle="TextStyle.H5">Account Created</RadzenText>
+                    <RadzenAlert AlertStyle="AlertStyle.Success" AllowClose="false">Your account was created successfully. Signing you in...</RadzenAlert>
+                    <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+}
+else
+{
+    <RadzenRow JustifyContent="JustifyContent.Center" class="mt-5">
+        <RadzenColumn Size="12" SizeMD="8" SizeLG="5">
+            <RadzenCard>
+                <RadzenStack Gap="1rem">
+                    <RadzenText TextStyle="TextStyle.H4">Create Account</RadzenText>
+
+                    @if (!string.IsNullOrWhiteSpace(errorMessage))
+                    {
+                        <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+                    }
+
+                    <RadzenTemplateForm TItem="RegisterFormModel" Data="@form" Submit="HandleRegisterAsync">
+                        <RadzenStack Gap="0.75rem">
+
+                            <RadzenRow Gap="1rem">
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="First Name" Variant="Variant.Outlined" Style="width:100%;">
+                                        <RadzenTextBox Name="FirstName" @bind-Value="form.FirstName" Style="width:100%;" />
+                                    </RadzenFormField>
+                                    <RadzenRequiredValidator Component="FirstName" Text="First name is required" Popup="true" />
+                                </RadzenColumn>
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Last Name" Variant="Variant.Outlined" Style="width:100%;">
+                                        <RadzenTextBox Name="LastName" @bind-Value="form.LastName" Style="width:100%;" />
+                                    </RadzenFormField>
+                                    <RadzenRequiredValidator Component="LastName" Text="Last name is required" Popup="true" />
+                                </RadzenColumn>
+                            </RadzenRow>
+
+                            <RadzenFormField Text="Email" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="Email" @bind-Value="form.Email" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="Email" Text="Email is required" Popup="true" />
+                            <RadzenEmailValidator Component="Email" Text="Enter a valid email address" Popup="true" />
+
+                            <RadzenFormField Text="Username" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenTextBox Name="Username" @bind-Value="form.Username" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="Username" Text="Username is required" Popup="true" />
+
+                            <RadzenFormField Text="Password" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenPassword Name="Password" Value="@form.Password" Change="OnPasswordChange" @oninput="OnPasswordInput" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="Password" Text="Password is required" Popup="true" />
+
+                            @if (!string.IsNullOrEmpty(form.Password))
+                            {
+                                <RadzenStack Gap="0.25rem">
+                                    <RadzenProgressBar Value="@passwordStrengthPercent" ShowValue="false" ProgressBarStyle="@passwordBarStyle" Style="height:6px;border-radius:3px;" />
+                                    <RadzenText TextStyle="TextStyle.Caption" Style="@passwordLabelStyle">Strength: @passwordStrengthLabel</RadzenText>
+                                    <RadzenStack Gap="0.1rem">
+                                        @foreach (var rule in passwordRules)
+                                        {
+                                            <RadzenText TextStyle="TextStyle.Caption" Style="@(rule.Met ? "color:var(--app-input-valid);" : "color:var(--app-text);opacity:0.55;")">
+                                                @(rule.Met ? "✓" : "○") @rule.Text
+                                            </RadzenText>
+                                        }
+                                    </RadzenStack>
+                                </RadzenStack>
+                            }
+
+                            <RadzenFormField Text="Confirm Password" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenPassword Name="ConfirmPassword" @bind-Value="form.ConfirmPassword" @oninput="OnConfirmPasswordInput" Style="width:100%;" />
+                            </RadzenFormField>
+                            <RadzenRequiredValidator Component="ConfirmPassword" Text="Please confirm your password" Popup="true" />
+                            @if (confirmMismatch)
+                            {
+                                <RadzenText TextStyle="TextStyle.Caption" Style="color:#e50000;">Passwords do not match</RadzenText>
+                            }
+
+                            <RadzenButton Text="Create Account"
+                                          ButtonType="ButtonType.Submit"
+                                          ButtonStyle="ButtonStyle.Primary"
+                                          Icon="person_add"
+                                          Disabled="isBusy"
+                                          Style="width:100%;margin-top:0.5rem;" />
+                        </RadzenStack>
+                    </RadzenTemplateForm>
+
+                    <RadzenRow JustifyContent="JustifyContent.Center">
+                        <RadzenText TextStyle="TextStyle.Body2">Already have an account? <RadzenLink Path="@LoginUrl" Text="Sign in" /></RadzenText>
+                    </RadzenRow>
+                </RadzenStack>
+            </RadzenCard>
+        </RadzenColumn>
+    </RadzenRow>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private RegisterFormModel form = new();
+    private bool isBusy;
+    private bool registered;
+    private string? errorMessage;
+    private bool confirmMismatch = false;
+
+    private double passwordStrengthPercent;
+    private string passwordStrengthLabel = "";
+    private string passwordLabelStyle = "";
+    private ProgressBarStyle passwordBarStyle = ProgressBarStyle.Danger;
+    private List<PasswordRule> passwordRules = [];
+
+    private string LoginUrl => string.IsNullOrWhiteSpace(ReturnUrl)
+        ? "/fetch-login"
+        : $"/fetch-login?returnUrl={Uri.EscapeDataString(ReturnUrl)}";
+
+    protected override void OnInitialized()
+    {
+        if (UserSession.IsAuthenticated)
+        {
+            Navigation.NavigateTo("/", replace: true);
+        }
+    }
+
+    private void OnPasswordInput(ChangeEventArgs e)
+    {
+        form.Password = e.Value?.ToString();
+        EvaluatePasswordStrength(form.Password);
+        confirmMismatch = !string.IsNullOrEmpty(form.ConfirmPassword) &&
+                          !string.Equals(form.Password, form.ConfirmPassword, StringComparison.Ordinal);
+    }
+
+    private void OnConfirmPasswordInput(ChangeEventArgs e)
+    {
+        form.ConfirmPassword = e.Value?.ToString();
+        confirmMismatch = !string.IsNullOrEmpty(form.ConfirmPassword) &&
+                          !string.Equals(form.Password, form.ConfirmPassword, StringComparison.Ordinal);
+    }
+
+    private void OnPasswordChange(object? value)
+    {
+        form.Password = value?.ToString();
+        EvaluatePasswordStrength(form.Password);
+    }
+
+    private void EvaluatePasswordStrength(string? password)
+    {
+        if (string.IsNullOrEmpty(password))
+        {
+            passwordRules = [];
+            passwordStrengthPercent = 0;
+            passwordStrengthLabel = "";
+            return;
+        }
+
+        passwordRules =
+        [
+            new("At least 8 characters", password.Length >= 8),
+            new("Uppercase letter (A–Z)", password.Any(char.IsUpper)),
+            new("Lowercase letter (a–z)", password.Any(char.IsLower)),
+            new("Number (0–9)", password.Any(char.IsDigit)),
+            new("Special character (!@#$%...)", password.Any(c => !char.IsLetterOrDigit(c)))
+        ];
+
+        var metCount = passwordRules.Count(r => r.Met);
+        (passwordStrengthPercent, passwordStrengthLabel, passwordBarStyle, passwordLabelStyle) = metCount switch
+        {
+            0 or 1 => (20d,  "Weak",     ProgressBarStyle.Danger,  "color:#e50000;"),
+            2      => (40d,  "Fair",     ProgressBarStyle.Warning, "color:#e07000;"),
+            3      => (60d,  "Moderate", ProgressBarStyle.Info,    "color:#1a73e8;"),
+            4      => (80d,  "Good",     ProgressBarStyle.Success, "color:#26b050;"),
+            _      => (100d, "Strong",   ProgressBarStyle.Success, "color:#26b050;")
+        };
+    }
+
+    private async Task HandleRegisterAsync(RegisterFormModel _)
+    {
+        errorMessage = null;
+
+        var usernameError = ValidateUsername(form.Username);
+        if (usernameError is not null)
+        {
+            errorMessage = usernameError;
+            return;
+        }
+
+        if (passwordRules.Count == 0 || passwordRules.Any(r => !r.Met))
+        {
+            errorMessage = "Password does not meet all requirements.";
+            return;
+        }
+
+        if (!string.Equals(form.Password, form.ConfirmPassword, StringComparison.Ordinal))
+        {
+            errorMessage = "Passwords do not match.";
+            return;
+        }
+
+        isBusy = true;
+
+        try
+        {
+            var newUser = new AppUserDto
+            {
+                Username = form.Username!.Trim(),
+                Password = form.Password,
+                Email = form.Email?.Trim(),
+                FirstName = form.FirstName?.Trim(),
+                LastName = form.LastName?.Trim(),
+                DisplayName = $"{form.FirstName?.Trim()} {form.LastName?.Trim()}".Trim(),
+                IsActive = true
+            };
+
+            var created = await Client.Api.AppUsers.PostAsync(newUser);
+
+            if (created is null)
+            {
+                errorMessage = "Account creation failed. Please try again.";
+                return;
+            }
+
+            registered = true;
+            StateHasChanged();
+
+            var loginResult = await UserSession.LoginAsync(form.Username!.Trim(), form.Password);
+            if (!loginResult.Succeeded)
+            {
+                Navigation.NavigateTo(LoginUrl, replace: true);
+                return;
+            }
+
+            var destination = !string.IsNullOrWhiteSpace(ReturnUrl) && Uri.IsWellFormedUriString(ReturnUrl, UriKind.Relative)
+                ? ReturnUrl
+                : "/";
+
+            Navigation.NavigateTo(destination, replace: true);
+        }
+        catch (Exception ex)
+        {
+            registered = false;
+            errorMessage = BuildErrorMessage(ex);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private static string BuildErrorMessage(Exception ex)
+    {
+        var msg = ex.Message;
+        if (msg.Contains("409") || msg.Contains("conflict", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("already exists", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("duplicate", StringComparison.OrdinalIgnoreCase))
+        {
+            return "An account with that username or email already exists. Please choose a different one.";
+        }
+
+        return $"Unable to create account. {msg}";
+    }
+
+    private static string? ValidateUsername(string? username)
+    {
+        if (string.IsNullOrWhiteSpace(username)) return "Username is required.";
+        var trimmed = username.Trim();
+        if (trimmed.Length < 3) return "Username must be at least 3 characters.";
+        if (trimmed.Length > 50) return "Username must be 50 characters or fewer.";
+        if (trimmed.Contains(' ')) return "Username cannot contain spaces.";
+        if (!trimmed.All(c => char.IsLetterOrDigit(c) || c == '_' || c == '-'))
+            return "Username may only contain letters, numbers, underscores, and hyphens.";
+        return null;
+    }
+
+    private sealed class RegisterFormModel
+    {
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Email { get; set; }
+        public string? Username { get; set; }
+        public string? Password { get; set; }
+        public string? ConfirmPassword { get; set; }
+    }
+
+    private sealed record PasswordRule(string Text, bool Met);
+}
