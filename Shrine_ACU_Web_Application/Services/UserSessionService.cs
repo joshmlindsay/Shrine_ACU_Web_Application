@@ -404,14 +404,24 @@ public sealed class UserSessionService
 
     private static PermissionPolicy ResolvePolicyForAccess(UserApplicationAccessDto access)
     {
-        var rolePolicy = access.AccessRoles switch
+        var rolePolicy = PermissionPolicy.None;
+
+        if (access.AccessRoles.HasValue)
         {
-            UserAccessRole.Admin => new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: true, CanManageUsers: true, CanAccessScoring: true, IsAdmin: true),
-            UserAccessRole.Manager => new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: true, CanManageUsers: true, CanAccessScoring: true, IsAdmin: false),
-            UserAccessRole.Judge => new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: false, CanManageUsers: false, CanAccessScoring: true, IsAdmin: false),
-            UserAccessRole.Participant => new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: false, CanManageUsers: false, CanAccessScoring: false, IsAdmin: false),
-            _ => PermissionPolicy.None
-        };
+            var roles = access.AccessRoles.Value;
+
+            if (roles.HasFlag(UserAccessRole.Admin))
+                rolePolicy = rolePolicy.Merge(new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: true, CanManageUsers: true, CanAccessScoring: true, IsAdmin: true));
+
+            if (roles.HasFlag(UserAccessRole.Manager))
+                rolePolicy = rolePolicy.Merge(new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: true, CanManageUsers: true, CanAccessScoring: true, IsAdmin: false));
+
+            if (roles.HasFlag(UserAccessRole.Judge))
+                rolePolicy = rolePolicy.Merge(new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: false, CanManageUsers: false, CanAccessScoring: true, IsAdmin: false));
+
+            if (roles.HasFlag(UserAccessRole.Participant))
+                rolePolicy = rolePolicy.Merge(new PermissionPolicy(CanRead: true, CanWrite: true, CanManage: false, CanManageUsers: false, CanAccessScoring: false, IsAdmin: false));
+        }
 
         var accessLevelPolicy = new PermissionPolicy(
             CanRead: AccessLevelContains(access.AccessLevel, "read") || AccessLevelContains(access.AccessLevel, "view"),
@@ -426,8 +436,11 @@ public sealed class UserSessionService
             CanWrite: access.CanWrite == true,
             CanManage: access.CanManage == true,
             CanManageUsers: access.CanManage == true,
-            CanAccessScoring: access.CanManage == true || access.AccessRoles is UserAccessRole.Admin or UserAccessRole.Manager or UserAccessRole.Judge,
-            IsAdmin: access.CanManage == true && access.AccessRoles == UserAccessRole.Admin);
+            CanAccessScoring: access.CanManage == true || (access.AccessRoles.HasValue && (
+                access.AccessRoles.Value.HasFlag(UserAccessRole.Admin) ||
+                access.AccessRoles.Value.HasFlag(UserAccessRole.Manager) ||
+                access.AccessRoles.Value.HasFlag(UserAccessRole.Judge))),
+            IsAdmin: access.CanManage == true && access.AccessRoles.HasValue && access.AccessRoles.Value.HasFlag(UserAccessRole.Admin));
 
         return rolePolicy.Merge(accessLevelPolicy).Merge(flagPolicy).Normalize();
     }

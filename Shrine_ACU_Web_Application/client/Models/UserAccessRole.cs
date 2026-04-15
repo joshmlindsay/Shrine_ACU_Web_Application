@@ -5,28 +5,29 @@ namespace AcuCarShowClient.Models
 {
     [global::System.CodeDom.Compiler.GeneratedCode("Kiota", "1.0.0")]
     #pragma warning disable CS1591
+    [Flags]
     public enum UserAccessRole
     #pragma warning restore CS1591
     {
         [EnumMember(Value = "None")]
         #pragma warning disable CS1591
-        None,
+        None = 0,
         #pragma warning restore CS1591
         [EnumMember(Value = "Admin")]
         #pragma warning disable CS1591
-        Admin,
+        Admin = 1,
         #pragma warning restore CS1591
         [EnumMember(Value = "Participant")]
         #pragma warning disable CS1591
-        Participant,
+        Participant = 2,
         #pragma warning restore CS1591
         [EnumMember(Value = "Judge")]
         #pragma warning disable CS1591
-        Judge,
+        Judge = 4,
         #pragma warning restore CS1591
         [EnumMember(Value = "Manager")]
         #pragma warning disable CS1591
-        Manager,
+        Manager = 8,
         #pragma warning restore CS1591
     }
 }
