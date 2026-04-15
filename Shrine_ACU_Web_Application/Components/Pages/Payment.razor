@@ -77,22 +77,37 @@ else
                                 </RadzenFormField>
                                 <RadzenRequiredValidator Component="PaymentMethod" Text="Payment method is required" Popup="true" />
 
-                                <RadzenFormField Text="Amount" Variant="Variant.Outlined" Style="width:100%;">
-                                    <RadzenNumeric Name="Amount" 
-                                                   TValue="double?" 
-                                                   @bind-Value="paymentForm.Amount" 
-                                                   Min="0" 
-                                                   Max="@((decimal?)maxPaymentAmount)"
-                                                   Step="1" 
-                                                   Format="c2"
-                                                   Style="width:100%;"
-                                                   Placeholder="@(maxPaymentAmount.HasValue ? $"Max: {maxPaymentAmount.Value:C}" : "Enter payment amount")" />
-                                </RadzenFormField>
-                                <RadzenRequiredValidator Component="Amount" Text="Amount is required" Popup="true" />
-                                @if (maxPaymentAmount.HasValue)
+                                @if (!IsOnlinePaymentMethod(paymentForm.PaymentMethod))
+                                {
+                                    <RadzenFormField Text="Amount" Variant="Variant.Outlined" Style="width:100%;">
+                                        <RadzenNumeric Name="Amount" 
+                                                       TValue="double?" 
+                                                       @bind-Value="paymentForm.Amount" 
+                                                       Min="0" 
+                                                       Max="@((decimal?)maxPaymentAmount)"
+                                                       Step="1" 
+                                                       Format="c2"
+                                                       Style="width:100%;"
+                                                       Placeholder="@(maxPaymentAmount.HasValue ? $"Max: {maxPaymentAmount.Value:C}" : "Enter payment amount")" />
+                                    </RadzenFormField>
+                                    <RadzenRequiredValidator Component="Amount" Text="Amount is required" Popup="true" />
+                                    @if (maxPaymentAmount.HasValue)
+                                    {
+                                        <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
+                                            Maximum payment amount: @maxPaymentAmount.Value.ToString("C")
+                                        </RadzenText>
+                                    }
+                                }
+                                else if (maxPaymentAmount.HasValue)
+                                {
+                                    <RadzenText TextStyle="TextStyle.Body2">
+                                        <strong>Entry Fee:</strong> @maxPaymentAmount.Value.ToString("C")
+                                    </RadzenText>
+                                }
+                                else
                                 {
                                     <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
-                                        Maximum payment amount: @maxPaymentAmount.Value.ToString("C")
+                                        The exact amount will be confirmed at checkout.
                                     </RadzenText>
                                 }
 
@@ -278,28 +293,31 @@ else
     {
         errorMessage = null;
 
-        // Round down to whole dollars if needed
-        if (paymentForm.Amount.HasValue)
-        {
-            paymentForm.Amount = Math.Floor(paymentForm.Amount.Value);
-        }
-
-        if (paymentForm.Amount is null or <= 0)
-        {
-            errorMessage = "Please enter a valid payment amount.";
-            return;
-        }
-
-        if (maxPaymentAmount.HasValue && paymentForm.Amount > (double)maxPaymentAmount)
-        {
-            errorMessage = $"Payment amount cannot exceed {maxPaymentAmount.Value:C}.";
-            return;
-        }
-
         if (string.IsNullOrWhiteSpace(paymentForm.PaymentMethod))
         {
             errorMessage = "Please select a payment method.";
             return;
+        }
+
+        if (!IsOnlinePaymentMethod(paymentForm.PaymentMethod))
+        {
+            // Round down to whole dollars for manual payments
+            if (paymentForm.Amount.HasValue)
+            {
+                paymentForm.Amount = Math.Floor(paymentForm.Amount.Value);
+            }
+
+            if (paymentForm.Amount is null or <= 0)
+            {
+                errorMessage = "Please enter a valid payment amount.";
+                return;
+            }
+
+            if (maxPaymentAmount.HasValue && paymentForm.Amount > (double)maxPaymentAmount)
+            {
+                errorMessage = $"Payment amount cannot exceed {maxPaymentAmount.Value:C}.";
+                return;
+            }
         }
 
         isProcessing = true;
@@ -332,7 +350,7 @@ else
 
             var sessionRequest = new CarShowEntryPaymentSessionRequestDto
             {
-                Amount = paymentForm.Amount,
+                Amount = null,
                 PaymentProvider = ResolvePaymentProvider(paymentForm.PaymentMethod),
                 PreferredPaymentMethod = paymentForm.PaymentMethod,
                 SuccessUrl = successUrl,
@@ -416,16 +434,21 @@ else
 
     private static string BuildErrorMessage(string userMessage, Exception ex)
     {
-        if (!System.Diagnostics.Debugger.IsAttached)
+        if (System.Diagnostics.Debugger.IsAttached)
         {
-            return userMessage;
+            var detail = ex.InnerException is null
+                ? ex.Message
+                : $"{ex.Message} | Inner: {ex.InnerException.Message}";
+
+            return $"{userMessage} {detail}";
         }
 
-        var detail = ex.InnerException is null
-            ? ex.Message
-            : $"{ex.Message} | Inner: {ex.InnerException.Message}";
+        if (ex is Microsoft.Kiota.Abstractions.ApiException apiEx)
+        {
+            return $"{userMessage} (server error {apiEx.ResponseStatusCode})";
+        }
 
-        return $"{userMessage} {detail}";
+        return userMessage;
     }
 
     private sealed class PaymentFormModel
@@ -436,5 +459,5 @@ else
         public string? PaymentNotes { get; set; }
     }
 
-    private sealed record SelectionOption(string Label, string Value);
+    private sealed record SelectionOption(string Label, String Value);
 }
