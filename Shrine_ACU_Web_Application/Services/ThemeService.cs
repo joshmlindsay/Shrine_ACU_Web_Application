@@ -36,7 +36,15 @@ public sealed class AppThemeService
 
     public async Task SetPreferenceAsync(string? preference)
     {
-        Preference = Normalize(preference);
+        var newPreference = Normalize(preference);
+        
+        if (Preference == newPreference)
+        {
+            return;
+        }
+
+        Preference = newPreference;
+        NotifyStateChanged();
 
         if (_jsRuntime is not null)
         {
@@ -48,8 +56,6 @@ public sealed class AppThemeService
             {
             }
         }
-
-        NotifyStateChanged();
     }
 
     public static string Normalize(string? preference)

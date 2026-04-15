@@ -1,4 +1,5 @@
 @inject DialogService DialogService
+@inject AcuCarShowClient Client
 
 <RadzenStack Gap="1rem" Style="min-width:380px;max-width:520px;">
     @if (!string.IsNullOrWhiteSpace(errorMessage))
@@ -6,27 +7,58 @@
         <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
     }
 
-    <RadzenText TextStyle="TextStyle.Body2">
-        Entry: <b>@(Entry?.EntryNumber?.ToString() ?? "-")</b> | VIN: <b>@Display(Entry?.Vin)</b>
-    </RadzenText>
+    @if (isLoading)
+    {
+        <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+        <RadzenText TextStyle="TextStyle.Body2">Loading payment details...</RadzenText>
+    }
+    else
+    {
+        <RadzenText TextStyle="TextStyle.Body2">
+            Entry: <b>@(Entry?.EntryNumber?.ToString() ?? "-")</b> | VIN: <b>@Display(Entry?.Vin)</b>
+        </RadzenText>
 
-    <RadzenFormField Text="Payment method" Variant="Variant.Outlined" Style="width:100%;">
-        <RadzenDropDown TValue="string"
-                        Data="@paymentMethodOptions"
-                        TextProperty="Label"
-                        ValueProperty="Value"
-                        @bind-Value="preferredMethod"
-                        Style="width:100%;" />
-    </RadzenFormField>
+        <RadzenFormField Text="Payment method" Variant="Variant.Outlined" Style="width:100%;">
+            <RadzenDropDown TValue="string"
+                            Data="@paymentMethodOptions"
+                            TextProperty="Label"
+                            ValueProperty="Value"
+                            @bind-Value="preferredMethod"
+                            Style="width:100%;" />
+        </RadzenFormField>
 
-    <RadzenFormField Text="Amount" Variant="Variant.Outlined" Style="width:100%;">
-        <RadzenNumeric TValue="double?" @bind-Value="amount" Min="0" Step="1" Style="width:100%;" />
-    </RadzenFormField>
+        <RadzenFormField Text="Amount" Variant="Variant.Outlined" Style="width:100%;">
+            <RadzenNumeric TValue="double?"
+                           @bind-Value="amount"
+                           Min="0"
+                           Max="@((decimal?)maxPaymentAmount)"
+                           Step="1"
+                           Format="c2"
+                           Style="width:100%;"
+                           Placeholder="@(maxPaymentAmount.HasValue ? $"Max: {maxPaymentAmount.Value:C}" : "Enter payment amount")" />
+        </RadzenFormField>
 
-    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
-        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="Cancel" />
-        <RadzenButton Text="Continue to Checkout" ButtonStyle="ButtonStyle.Primary" Click="Submit" />
-    </RadzenStack>
+        @if (maxPaymentAmount.HasValue)
+        {
+            <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
+                Maximum payment amount: @maxPaymentAmount.Value.ToString("C")
+            </RadzenText>
+        }
+
+        <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">
+            <RadzenStack Gap="0.25rem">
+                <RadzenText><strong>Secure Checkout</strong></RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">
+                    You will be redirected to a secure payment page to complete your transaction.
+                </RadzenText>
+            </RadzenStack>
+        </RadzenAlert>
+
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+            <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="Cancel" />
+            <RadzenButton Text="Continue to Checkout" ButtonStyle="ButtonStyle.Primary" Click="Submit" />
+        </RadzenStack>
+    }
 </RadzenStack>
 
 @code {
@@ -38,14 +70,16 @@
         new("Cash App Pay", "CashAppPay"),
         new("Venmo", "Venmo"),
         new("Apple Pay", "ApplePay"),
-        new("Google Pay (Android)", "GooglePay")
+        new("Google Pay", "GooglePay")
     ];
 
     private string preferredMethod = "CashAppPay";
     private double? amount;
+    private decimal? maxPaymentAmount;
+    private bool isLoading = true;
     private string? errorMessage;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         if (!string.IsNullOrWhiteSpace(Entry?.PreferredPaymentMethod)
             && paymentMethodOptions.Any(x => string.Equals(x.Value, Entry.PreferredPaymentMethod, StringComparison.OrdinalIgnoreCase)))
@@ -53,9 +87,30 @@
             preferredMethod = Entry.PreferredPaymentMethod!;
         }
 
-        if (Entry?.PaidAmount > 0)
+        try
         {
-            amount = Entry.PaidAmount;
+            if (Entry?.PaidAmount > 0)
+            {
+                amount = Math.Floor(Entry.PaidAmount.Value);
+                maxPaymentAmount = (decimal)amount.Value;
+            }
+            else if (Entry?.EntryId is int entryId)
+            {
+                var paymentInfo = await Client.Api.CarShowEntries[entryId].Payment.GetAsync();
+                if (paymentInfo?.PaidAmount > 0)
+                {
+                    amount = Math.Floor(paymentInfo.PaidAmount.Value);
+                    maxPaymentAmount = (decimal)amount.Value;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load payment defaults.", ex);
+        }
+        finally
+        {
+            isLoading = false;
         }
     }
 
@@ -69,9 +124,20 @@
             return;
         }
 
+        if (amount.HasValue)
+        {
+            amount = Math.Floor(amount.Value);
+        }
+
         if (!amount.HasValue || amount.Value <= 0)
         {
             errorMessage = "Amount is required.";
+            return;
+        }
+
+        if (maxPaymentAmount.HasValue && amount.Value > (double)maxPaymentAmount.Value)
+        {
+            errorMessage = $"Payment amount cannot exceed {maxPaymentAmount.Value:C}.";
             return;
         }
 
@@ -90,6 +156,20 @@
     private static string Display(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? "-" : value;
+    }
+
+    private static string BuildErrorMessage(string userMessage, Exception ex)
+    {
+        if (!System.Diagnostics.Debugger.IsAttached)
+        {
+            return userMessage;
+        }
+
+        var detail = ex.InnerException is null
+            ? ex.Message
+            : $"{ex.Message} | Inner: {ex.InnerException.Message}";
+
+        return $"{userMessage} {detail}";
     }
 
     private sealed record SelectionOption(string Label, string Value);

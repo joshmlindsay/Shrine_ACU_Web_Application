@@ -1,4 +1,3 @@
-using Microsoft.Kiota.Abstractions.Authentication;
 using Microsoft.Kiota.Http.HttpClientLibrary;
 using Radzen;
 using Shrine_ACU_Web_Application.Components;
@@ -17,21 +16,21 @@ builder.Services.AddHttpClient("AcuCarShowApi", (sp, client) =>
     var configuration = sp.GetRequiredService<IConfiguration>();
     var baseUrl = configuration["AcuCarShowApi:BaseUrl"];
 
-#if DEBUG
-    baseUrl = "https://localhost:44355";
-#endif
-
     if (!string.IsNullOrWhiteSpace(baseUrl))
     {
         client.BaseAddress = new Uri(baseUrl);
     }
 });
 
+builder.Services.AddScoped<UserSessionService>();
+builder.Services.AddScoped<AppThemeService>();
+
 builder.Services.AddScoped<AcuCarShowClient.AcuCarShowClient>((sp) =>
 {
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
     var httpClient = httpClientFactory.CreateClient("AcuCarShowApi");
-    var requestAdapter = new HttpClientRequestAdapter(new AnonymousAuthenticationProvider(), httpClient: httpClient);
+    var authProvider = new UserSessionAuthenticationProvider(sp);
+    var requestAdapter = new HttpClientRequestAdapter(authProvider, httpClient: httpClient);
 
     if (httpClient.BaseAddress is not null)
     {
@@ -40,9 +39,6 @@ builder.Services.AddScoped<AcuCarShowClient.AcuCarShowClient>((sp) =>
 
     return new AcuCarShowClient.AcuCarShowClient(requestAdapter);
 });
-
-builder.Services.AddScoped<UserSessionService>();
-builder.Services.AddScoped<AppThemeService>();
 
 var app = builder.Build();
 

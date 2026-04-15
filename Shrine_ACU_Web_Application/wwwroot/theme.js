@@ -8,11 +8,17 @@ window.shrineTheme = (() => {
             return "system";
         }
 
-        const normalized = value.toLowerCase();
+        const normalized = value.toLowerCase().trim();
         return normalized === "light" || normalized === "dark" ? normalized : "system";
     };
 
-    const getPreference = () => normalize(window.localStorage.getItem(storageKey));
+    const getPreference = () => {
+        try {
+            return normalize(window.localStorage.getItem(storageKey));
+        } catch {
+            return "system";
+        }
+    };
 
     const resolveTheme = (preference) => {
         const normalized = normalize(preference);
@@ -53,12 +59,19 @@ window.shrineTheme = (() => {
 
     const setPreference = (preference) => {
         const normalizedPreference = normalize(preference);
-        window.localStorage.setItem(storageKey, normalizedPreference);
+        
+        try {
+            window.localStorage.setItem(storageKey, normalizedPreference);
+        } catch (e) {
+            console.error("Failed to save theme preference:", e);
+        }
+        
         apply(normalizedPreference);
     };
 
     const handleSystemPreferenceChange = () => {
-        if (getPreference() === "system") {
+        const currentPreference = getPreference();
+        if (currentPreference === "system") {
             apply("system");
         }
     };

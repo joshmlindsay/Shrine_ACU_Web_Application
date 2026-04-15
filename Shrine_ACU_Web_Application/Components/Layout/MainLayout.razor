@@ -47,7 +47,15 @@
 
         await AppThemeService.InitializeAsync(JS);
         await UserSession.InitializeAsync(JS);
-        await UserSession.EnsureAdminUsersLoadedAsync();
+
+        try
+        {
+            await UserSession.EnsureAdminUsersLoadedAsync();
+        }
+        catch
+        {
+        }
+
         hasInitialized = true;
 
         if (!UserSession.IsAuthenticated && !IsPublicRoute(Navigation.Uri))

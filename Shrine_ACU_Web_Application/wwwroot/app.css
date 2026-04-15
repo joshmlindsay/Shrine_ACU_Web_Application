@@ -14,6 +14,9 @@
     --app-nav-text-hover: #1f1f1f;
     --app-nav-item-active-bg: rgba(0, 0, 0, 0.08);
     --app-nav-item-hover-bg: rgba(0, 0, 0, 0.05);
+    
+    --btn-min-height: 44px;
+    --btn-min-width: 44px;
 }
 
 @media (max-width: 1200px) {
@@ -126,4 +129,202 @@ h1:focus {
 
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
     text-align: start;
+}
+
+/* ADA Compliance: Minimum touch target sizes */
+.rz-button, button, .btn {
+    min-height: var(--btn-min-height);
+    min-width: var(--btn-min-width);
+    padding: 0.5rem 1rem;
+}
+
+/* Enhanced button visibility for light mode */
+:root .rz-button.rz-light {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+    color: #212529;
+}
+
+:root .rz-button.rz-light:hover {
+    background-color: #dee2e6;
+    border-color: #6c757d;
+}
+
+:root .rz-button.rz-secondary {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: #ffffff;
+}
+
+:root .rz-button.rz-secondary:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+}
+
+:root .rz-button.rz-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+:root .rz-button.rz-warning:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+}
+
+:root .rz-button.rz-info {
+    background-color: #0dcaf0;
+    border-color: #0dcaf0;
+    color: #000000;
+}
+
+:root .rz-button.rz-info:hover {
+    background-color: #31d2f2;
+    border-color: #25cff2;
+}
+
+/* Enhanced button visibility for dark mode */
+:root[data-theme="dark"] .rz-button.rz-light {
+    background-color: #495057;
+    border-color: #6c757d;
+    color: #f8f9fa;
+}
+
+:root[data-theme="dark"] .rz-button.rz-light:hover {
+    background-color: #5a6268;
+    border-color: #868e96;
+}
+
+:root[data-theme="dark"] .rz-button.rz-secondary {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: #ffffff;
+}
+
+:root[data-theme="dark"] .rz-button.rz-secondary:hover {
+    background-color: #868e96;
+    border-color: #adb5bd;
+}
+
+:root[data-theme="dark"] .rz-button.rz-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #000000;
+}
+
+:root[data-theme="dark"] .rz-button.rz-warning:hover {
+    background-color: #ffcd39;
+    border-color: #ffc720;
+}
+
+:root[data-theme="dark"] .rz-button.rz-info {
+    background-color: #0dcaf0;
+    border-color: #0dcaf0;
+    color: #000000;
+}
+
+:root[data-theme="dark"] .rz-button.rz-info:hover {
+    background-color: #3dd5f3;
+    border-color: #6edff6;
+}
+
+:root[data-theme="dark"] .rz-button.rz-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #ffffff;
+}
+
+:root[data-theme="dark"] .rz-button.rz-primary:hover {
+    background-color: #3d8bfd;
+    border-color: #6ea8fe;
+}
+
+/* Icon visibility improvements */
+:root[data-theme="dark"] .rz-button i,
+:root[data-theme="dark"] .rz-button .rz-button-icon-left,
+:root[data-theme="dark"] .rz-button .rz-button-icon-right {
+    opacity: 1;
+    filter: none;
+}
+
+/* Ensure disabled buttons are still distinguishable */
+.rz-button:disabled,
+.rz-button.rz-state-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Enhanced focus styles for accessibility */
+.rz-button:focus-visible,
+button:focus-visible {
+    outline: 3px solid var(--app-focus-shadow-outer);
+    outline-offset: 2px;
+}
+
+/* Responsive button sizing for mobile */
+@media (max-width: 768px) {
+    .rz-button, button, .btn {
+        min-height: 48px;
+        min-width: 48px;
+        padding: 0.75rem 1.25rem;
+    }
+}
+
+/* Payment form enhancements */
+.rz-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+:root[data-theme="dark"] .rz-card {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Badge visibility improvements */
+.rz-badge {
+    font-weight: 500;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.875rem;
+}
+
+/* Form field labels */
+.rz-form-field label {
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+/* Improve dropdown and input visibility in dark mode */
+:root[data-theme="dark"] .rz-dropdown,
+:root[data-theme="dark"] .rz-textbox,
+:root[data-theme="dark"] .rz-numeric,
+:root[data-theme="dark"] .rz-textarea {
+    background-color: #2d2d2d;
+    border-color: #4a4a4a;
+    color: #f3f3f3;
+}
+
+:root[data-theme="dark"] .rz-dropdown:hover,
+:root[data-theme="dark"] .rz-textbox:hover,
+:root[data-theme="dark"] .rz-numeric:hover,
+:root[data-theme="dark"] .rz-textarea:hover {
+    border-color: #6c757d;
+}
+
+:root[data-theme="dark"] .rz-dropdown:focus,
+:root[data-theme="dark"] .rz-textbox:focus,
+:root[data-theme="dark"] .rz-numeric:focus,
+:root[data-theme="dark"] .rz-textarea:focus {
+    border-color: var(--app-focus-shadow-outer);
+    background-color: #343434;
+}
+
+/* Alert styling improvements */
+.rz-alert {
+    border-radius: 4px;
+    padding: 1rem;
+}
+
+/* Progress indicator visibility */
+.rz-progressbar-circular {
+    margin: 2rem auto;
+    display: block;
 }

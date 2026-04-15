@@ -257,8 +257,14 @@ else
 
     private async Task OnThemeChangedAsync(object? value)
     {
-        selectedTheme = AppThemeService.Normalize(value?.ToString());
-        await AppThemeService.SetPreferenceAsync(selectedTheme);
+        var newTheme = AppThemeService.Normalize(value?.ToString());
+        
+        if (selectedTheme != newTheme)
+        {
+            selectedTheme = newTheme;
+            await AppThemeService.SetPreferenceAsync(selectedTheme);
+            StateHasChanged();
+        }
     }
 
     private void LoadProfileForm()
@@ -476,12 +482,26 @@ else
         }
         catch (Exception ex)
         {
-            errorMessage = $"Unable to start payment checkout. {ex.Message}";
+            errorMessage = BuildErrorMessage("Unable to start payment checkout.", ex);
         }
         finally
         {
             isLaunchingCheckout = false;
         }
+    }
+
+    private static string BuildErrorMessage(string userMessage, Exception ex)
+    {
+        if (!System.Diagnostics.Debugger.IsAttached)
+        {
+            return userMessage;
+        }
+
+        var detail = ex.InnerException is null
+            ? ex.Message
+            : $"{ex.Message} | Inner: {ex.InnerException.Message}";
+
+        return $"{userMessage} {detail}";
     }
 
     private static string ResolvePaymentProvider(string method)

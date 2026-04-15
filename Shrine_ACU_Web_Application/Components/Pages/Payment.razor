@@ -1,0 +1,440 @@
+@page "/payment/{EntryId:int}"
+@rendermode InteractiveServer
+@inject AcuCarShowClient Client
+@inject NavigationManager Navigation
+@inject UserSessionService UserSession
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Complete Payment</PageTitle>
+
+@if (!UserSession.IsAuthenticated)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in to complete payment.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1.5rem" Style="max-width: 600px; margin: 0 auto;">
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText TextStyle="TextStyle.H4">Complete Your Payment</RadzenText>
+                
+                @if (!string.IsNullOrWhiteSpace(errorMessage))
+                {
+                    <RadzenAlert AlertStyle="AlertStyle.Danger" AllowClose="false">@errorMessage</RadzenAlert>
+                }
+
+                @if (isLoading)
+                {
+                    <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+                    <RadzenText TextStyle="TextStyle.Body2" Style="text-align: center;">Loading your entry details...</RadzenText>
+                }
+                else if (entry is not null)
+                {
+                    <RadzenCard Style="background-color: var(--rz-secondary-lighter); border: 1px solid var(--rz-secondary-light);">
+                        <RadzenStack Gap="0.5rem">
+                            <RadzenText TextStyle="TextStyle.H6">Entry Details</RadzenText>
+                            <RadzenText><strong>Entry #:</strong> @entry.EntryNumber</RadzenText>
+                            <RadzenText><strong>Vehicle:</strong> @($"{entry.CarDetail?.Year} {entry.CarDetail?.Make} {entry.CarDetail?.Model}".Trim())</RadzenText>
+                            <RadzenText><strong>VIN:</strong> @entry.Vin</RadzenText>
+                            @if (selectedShow is not null)
+                            {
+                                <RadzenText><strong>Show:</strong> @selectedShow.Name</RadzenText>
+                            }
+                            <RadzenText><strong>Status:</strong> @entry.PaymentStatus</RadzenText>
+                        </RadzenStack>
+                    </RadzenCard>
+
+                    @if (string.Equals(entry.PaymentStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <RadzenAlert AlertStyle="AlertStyle.Success" AllowClose="false">
+                            <RadzenStack Gap="0.5rem">
+                                <RadzenText><strong>This entry has already been paid!</strong></RadzenText>
+                                <RadzenText>Paid Amount: @FormatCurrency(entry.PaidAmount)</RadzenText>
+                                @if (!string.IsNullOrWhiteSpace(entry.PaymentProofReference))
+                                {
+                                    <RadzenText>Reference: @entry.PaymentProofReference</RadzenText>
+                                }
+                            </RadzenStack>
+                        </RadzenAlert>
+                        
+                        <RadzenButton Text="Back to Profile" Icon="arrow_back" ButtonStyle="ButtonStyle.Primary" Click="@(() => Navigation.NavigateTo("/profile"))" Style="width:100%;" />
+                    }
+                    else
+                    {
+                        <RadzenTemplateForm TItem="PaymentFormModel" Data="@paymentForm" Submit="ProcessPaymentAsync">
+                            <RadzenStack Gap="1rem">
+                                <RadzenText TextStyle="TextStyle.H6">Payment Information</RadzenText>
+                                
+                                <RadzenFormField Text="Payment Method" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenDropDown Name="PaymentMethod"
+                                                    TValue="string"
+                                                    Data="@paymentMethodOptions"
+                                                    TextProperty="Label"
+                                                    ValueProperty="Value"
+                                                    @bind-Value="paymentForm.PaymentMethod"
+                                                    Placeholder="Select payment method"
+                                                    Style="width:100%;" />
+                                </RadzenFormField>
+                                <RadzenRequiredValidator Component="PaymentMethod" Text="Payment method is required" Popup="true" />
+
+                                <RadzenFormField Text="Amount" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenNumeric Name="Amount" 
+                                                   TValue="double?" 
+                                                   @bind-Value="paymentForm.Amount" 
+                                                   Min="0" 
+                                                   Max="@((decimal?)maxPaymentAmount)"
+                                                   Step="1" 
+                                                   Format="c2"
+                                                   Style="width:100%;"
+                                                   Placeholder="@(maxPaymentAmount.HasValue ? $"Max: {maxPaymentAmount.Value:C}" : "Enter payment amount")" />
+                                </RadzenFormField>
+                                <RadzenRequiredValidator Component="Amount" Text="Amount is required" Popup="true" />
+                                @if (maxPaymentAmount.HasValue)
+                                {
+                                    <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
+                                        Maximum payment amount: @maxPaymentAmount.Value.ToString("C")
+                                    </RadzenText>
+                                }
+
+                                @if (IsOnlinePaymentMethod(paymentForm.PaymentMethod))
+                                {
+                                    <RadzenAlert AlertStyle="AlertStyle.Info" AllowClose="false">
+                                        <RadzenStack Gap="0.25rem">
+                                            <RadzenText><strong>Secure Checkout</strong></RadzenText>
+                                            <RadzenText TextStyle="TextStyle.Body2">
+                                                You will be redirected to a secure payment page to complete your transaction.
+                                            </RadzenText>
+                                        </RadzenStack>
+                                    </RadzenAlert>
+                                }
+                                else
+                                {
+                                    <RadzenFormField Text="Payment Reference / Receipt #" Variant="Variant.Outlined" Style="width:100%;">
+                                        <RadzenTextBox @bind-Value="paymentForm.PaymentProofReference" 
+                                                       Style="width:100%;"
+                                                       Placeholder="Optional reference number" />
+                                    </RadzenFormField>
+
+                                    <RadzenFormField Text="Payment Notes" Variant="Variant.Outlined" Style="width:100%;">
+                                        <RadzenTextArea @bind-Value="paymentForm.PaymentNotes" 
+                                                        Style="width:100%;" 
+                                                        Rows="3"
+                                                        Placeholder="Optional payment details or notes" />
+                                    </RadzenFormField>
+                                }
+
+                                <RadzenButton Text="@(IsOnlinePaymentMethod(paymentForm.PaymentMethod) ? "Proceed to Checkout" : "Record Payment")"
+                                              ButtonType="ButtonType.Submit"
+                                              ButtonStyle="ButtonStyle.Primary"
+                                              Icon="@(IsOnlinePaymentMethod(paymentForm.PaymentMethod) ? "credit_card" : "save")"
+                                              Disabled="isProcessing"
+                                              Style="width:100%;" />
+
+                                <RadzenButton Text="Cancel"
+                                              ButtonStyle="ButtonStyle.Light"
+                                              Icon="cancel"
+                                              Click="@(() => Navigation.NavigateTo("/profile"))"
+                                              Disabled="isProcessing"
+                                              Style="width:100%;" />
+                            </RadzenStack>
+                        </RadzenTemplateForm>
+                    }
+                }
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard Style="background-color: var(--rz-base-200);">
+            <RadzenStack Gap="0.5rem">
+                <RadzenText TextStyle="TextStyle.H6">Payment Methods Accepted</RadzenText>
+                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                    <RadzenBadge Text="Cash App Pay" BadgeStyle="BadgeStyle.Info" />
+                    <RadzenBadge Text="Venmo" BadgeStyle="BadgeStyle.Info" />
+                    <RadzenBadge Text="Apple Pay" BadgeStyle="BadgeStyle.Info" />
+                    <RadzenBadge Text="Google Pay" BadgeStyle="BadgeStyle.Info" />
+                    <RadzenBadge Text="Cash" BadgeStyle="BadgeStyle.Secondary" />
+                </RadzenStack>
+                <RadzenText TextStyle="TextStyle.Caption" Style="margin-top: 0.5rem;">
+                    All online payments are securely processed through our payment providers.
+                </RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenStack>
+}
+
+@code {
+    [Parameter]
+    public int EntryId { get; set; }
+
+    private const string PaymentMethodCashAppPay = "CashAppPay";
+    private const string PaymentMethodVenmo = "Venmo";
+    private const string PaymentMethodApplePay = "ApplePay";
+    private const string PaymentMethodGooglePay = "GooglePay";
+    private const string PaymentMethodCash = "Cash";
+
+    private readonly IReadOnlyList<SelectionOption> paymentMethodOptions =
+    [
+        new("Cash App Pay", PaymentMethodCashAppPay),
+        new("Venmo", PaymentMethodVenmo),
+        new("Apple Pay", PaymentMethodApplePay),
+        new("Google Pay", PaymentMethodGooglePay),
+        new("Cash", PaymentMethodCash)
+    ];
+
+    private CarShowEntryDto? entry;
+    private CarShowDto? selectedShow;
+    private PaymentFormModel paymentForm = new();
+    private bool isLoading = true;
+    private bool isProcessing;
+    private string? errorMessage;
+    private decimal? maxPaymentAmount; // Store the maximum allowed payment amount
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!UserSession.IsAuthenticated)
+        {
+            Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString($"/payment/{EntryId}")}");
+            return;
+        }
+
+        await LoadEntryAsync();
+    }
+
+    private async Task LoadEntryAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            entry = await Client.Api.CarShowEntries[EntryId].GetAsync();
+            
+            if (entry is null)
+            {
+                errorMessage = "Entry not found.";
+                return;
+            }
+
+            if (entry.ShowId.HasValue)
+            {
+                try
+                {
+                    selectedShow = await Client.Api.CarShows[entry.ShowId.Value].GetAsync();
+                }
+                catch
+                {
+                }
+            }
+
+            paymentForm.PaymentMethod = entry.PreferredPaymentMethod;
+            
+            if (entry.PaidAmount.HasValue && entry.PaidAmount.Value > 0)
+            {
+                paymentForm.Amount = entry.PaidAmount;
+                maxPaymentAmount = (decimal)Math.Floor(entry.PaidAmount.Value);
+            }
+            else
+            {
+                await TryLoadDefaultPaymentAmountAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load entry.", ex);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task TryLoadDefaultPaymentAmountAsync()
+    {
+        try
+        {
+            // Call the payment endpoint to get default amount
+            // If the backend returns a default amount, use it
+            var paymentInfo = await Client.Api.CarShowEntries[EntryId].Payment.GetAsync();
+            
+            if (paymentInfo?.PaidAmount.HasValue == true && paymentInfo.PaidAmount.Value > 0)
+            {
+                var defaultAmount = paymentInfo.PaidAmount.Value;
+                
+                // Round down to whole dollars
+                defaultAmount = Math.Floor(defaultAmount);
+                
+                // Set as both the pre-filled amount and the maximum
+                paymentForm.Amount = defaultAmount;
+                maxPaymentAmount = (decimal)defaultAmount;
+            }
+        }
+        catch
+        {
+            // If we can't get the default amount, just leave it blank
+            // User will need to enter it manually
+        }
+    }
+
+    private async Task ProcessPaymentAsync(PaymentFormModel _)
+    {
+        errorMessage = null;
+
+        // Round down to whole dollars if needed
+        if (paymentForm.Amount.HasValue)
+        {
+            paymentForm.Amount = Math.Floor(paymentForm.Amount.Value);
+        }
+
+        if (paymentForm.Amount is null or <= 0)
+        {
+            errorMessage = "Please enter a valid payment amount.";
+            return;
+        }
+
+        if (maxPaymentAmount.HasValue && paymentForm.Amount > (double)maxPaymentAmount)
+        {
+            errorMessage = $"Payment amount cannot exceed {maxPaymentAmount.Value:C}.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(paymentForm.PaymentMethod))
+        {
+            errorMessage = "Please select a payment method.";
+            return;
+        }
+
+        isProcessing = true;
+
+        try
+        {
+            if (IsOnlinePaymentMethod(paymentForm.PaymentMethod))
+            {
+                await ProcessOnlinePaymentAsync();
+            }
+            else
+            {
+                await RecordManualPaymentAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Payment processing failed.", ex);
+            isProcessing = false;
+        }
+    }
+
+    private async Task ProcessOnlinePaymentAsync()
+    {
+        try
+        {
+            var baseUri = Navigation.BaseUri.TrimEnd('/');
+            var successUrl = $"{baseUri}/payment-return?entryId={EntryId}&result=success";
+            var cancelUrl = $"{baseUri}/payment-return?entryId={EntryId}&result=cancel";
+
+            var sessionRequest = new CarShowEntryPaymentSessionRequestDto
+            {
+                Amount = paymentForm.Amount,
+                PaymentProvider = ResolvePaymentProvider(paymentForm.PaymentMethod),
+                PreferredPaymentMethod = paymentForm.PaymentMethod,
+                SuccessUrl = successUrl,
+                CancelUrl = cancelUrl
+            };
+
+            var session = await Client.Api.CarShowEntries[EntryId].Payment.Session.PostAsync(sessionRequest);
+            
+            if (string.IsNullOrWhiteSpace(session?.CheckoutUrl))
+            {
+                errorMessage = "Unable to create payment session. Please try again or contact support.";
+                isProcessing = false;
+                return;
+            }
+
+            Navigation.NavigateTo(session.CheckoutUrl, forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to start payment session.", ex);
+            isProcessing = false;
+        }
+    }
+
+    private async Task RecordManualPaymentAsync()
+    {
+        try
+        {
+            if (entry is null) return;
+
+            entry.PaidAmount = paymentForm.Amount;
+            entry.PaymentStatus = "Paid";
+            entry.PreferredPaymentMethod = paymentForm.PaymentMethod;
+            entry.PaymentProvider = ResolvePaymentProvider(paymentForm.PaymentMethod);
+            entry.PaymentProofReference = NullIfWhiteSpace(paymentForm.PaymentProofReference);
+            entry.PaidAtUtc = DateTimeOffset.UtcNow;
+
+            if (!string.IsNullOrWhiteSpace(paymentForm.PaymentNotes))
+            {
+                entry.Notes = string.IsNullOrWhiteSpace(entry.Notes) 
+                    ? $"Payment Note: {paymentForm.PaymentNotes}" 
+                    : $"{entry.Notes}; Payment Note: {paymentForm.PaymentNotes}";
+            }
+
+            await Client.Api.CarShowEntries[EntryId].PutAsync(entry);
+            
+            Navigation.NavigateTo("/profile", replace: true);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to record payment.", ex);
+            isProcessing = false;
+        }
+    }
+
+    private static bool IsOnlinePaymentMethod(string? paymentMethod)
+    {
+        return paymentMethod is PaymentMethodCashAppPay or PaymentMethodVenmo or PaymentMethodApplePay or PaymentMethodGooglePay;
+    }
+
+    private static string? ResolvePaymentProvider(string? paymentMethod)
+    {
+        return paymentMethod switch
+        {
+            PaymentMethodVenmo => "Braintree",
+            PaymentMethodCash => "Manual",
+            PaymentMethodCashAppPay or PaymentMethodApplePay or PaymentMethodGooglePay => "Stripe",
+            _ => null
+        };
+    }
+
+    private static string FormatCurrency(double? amount)
+    {
+        return amount.HasValue ? $"${amount.Value:F2}" : "$0.00";
+    }
+
+    private static string? NullIfWhiteSpace(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string BuildErrorMessage(string userMessage, Exception ex)
+    {
+        if (!System.Diagnostics.Debugger.IsAttached)
+        {
+            return userMessage;
+        }
+
+        var detail = ex.InnerException is null
+            ? ex.Message
+            : $"{ex.Message} | Inner: {ex.InnerException.Message}";
+
+        return $"{userMessage} {detail}";
+    }
+
+    private sealed class PaymentFormModel
+    {
+        public string? PaymentMethod { get; set; }
+        public double? Amount { get; set; }
+        public string? PaymentProofReference { get; set; }
+        public string? PaymentNotes { get; set; }
+    }
+
+    private sealed record SelectionOption(string Label, string Value);
+}

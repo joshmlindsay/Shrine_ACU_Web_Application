@@ -364,17 +364,29 @@ public sealed class UserSessionService
 
     private async Task LoadAvailableUsersAsync()
     {
-        var users = (await _client.Api.AppUsers.GetAsync()) ?? [];
-        _availableUsers.Clear();
-
-        foreach (var user in users.Where(x => x.IsActive != false).OrderBy(GetUserLabel))
+        try
         {
-            _availableUsers.Add(user);
+            var users = (await _client.Api.AppUsers.GetAsync()) ?? [];
+            _availableUsers.Clear();
+
+            foreach (var user in users.Where(x => x.IsActive != false).OrderBy(GetUserLabel))
+            {
+                _availableUsers.Add(user);
+            }
+
+            if (CurrentUser is not null && !_availableUsers.Any(x => x.UserId == CurrentUser.UserId))
+            {
+                _availableUsers.Add(CurrentUser);
+            }
         }
-
-        if (CurrentUser is not null && !_availableUsers.Any(x => x.UserId == CurrentUser.UserId))
+        catch
         {
-            _availableUsers.Add(CurrentUser);
+            _availableUsers.Clear();
+
+            if (CurrentUser is not null)
+            {
+                _availableUsers.Add(CurrentUser);
+            }
         }
     }
 
