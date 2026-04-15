@@ -27,21 +27,16 @@
                             Style="width:100%;" />
         </RadzenFormField>
 
-        <RadzenFormField Text="Amount" Variant="Variant.Outlined" Style="width:100%;">
-            <RadzenNumeric TValue="double?"
-                           @bind-Value="amount"
-                           Min="0"
-                           Max="@((decimal?)maxPaymentAmount)"
-                           Step="1"
-                           Format="c2"
-                           Style="width:100%;"
-                           Placeholder="@(maxPaymentAmount.HasValue ? $"Max: {maxPaymentAmount.Value:C}" : "Enter payment amount")" />
-        </RadzenFormField>
-
         @if (maxPaymentAmount.HasValue)
         {
+            <RadzenText TextStyle="TextStyle.Body2">
+                <strong>Entry Fee:</strong> @maxPaymentAmount.Value.ToString("C")
+            </RadzenText>
+        }
+        else
+        {
             <RadzenText TextStyle="TextStyle.Caption" Style="color: var(--rz-text-secondary-color);">
-                Maximum payment amount: @maxPaymentAmount.Value.ToString("C")
+                The exact amount will be confirmed at checkout.
             </RadzenText>
         }
 
@@ -74,7 +69,6 @@
     ];
 
     private string preferredMethod = "CashAppPay";
-    private double? amount;
     private decimal? maxPaymentAmount;
     private bool isLoading = true;
     private string? errorMessage;
@@ -91,22 +85,20 @@
         {
             if (Entry?.PaidAmount > 0)
             {
-                amount = Math.Floor(Entry.PaidAmount.Value);
-                maxPaymentAmount = (decimal)amount.Value;
+                maxPaymentAmount = (decimal)Math.Floor(Entry.PaidAmount.Value);
             }
             else if (Entry?.EntryId is int entryId)
             {
                 var paymentInfo = await Client.Api.CarShowEntries[entryId].Payment.GetAsync();
                 if (paymentInfo?.PaidAmount > 0)
                 {
-                    amount = Math.Floor(paymentInfo.PaidAmount.Value);
-                    maxPaymentAmount = (decimal)amount.Value;
+                    maxPaymentAmount = (decimal)Math.Floor(paymentInfo.PaidAmount.Value);
                 }
             }
         }
-        catch (Exception ex)
+        catch
         {
-            errorMessage = BuildErrorMessage("Unable to load payment defaults.", ex);
+            // Amount display is informational only; checkout proceeds without it
         }
         finally
         {
@@ -124,26 +116,9 @@
             return;
         }
 
-        if (amount.HasValue)
-        {
-            amount = Math.Floor(amount.Value);
-        }
-
-        if (!amount.HasValue || amount.Value <= 0)
-        {
-            errorMessage = "Amount is required.";
-            return;
-        }
-
-        if (maxPaymentAmount.HasValue && amount.Value > (double)maxPaymentAmount.Value)
-        {
-            errorMessage = $"Payment amount cannot exceed {maxPaymentAmount.Value:C}.";
-            return;
-        }
-
         DialogService.Close(new CarShowEntryPaymentSessionRequestDto
         {
-            Amount = amount.Value,
+            Amount = null,
             PreferredPaymentMethod = preferredMethod
         });
     }
@@ -156,20 +131,6 @@
     private static string Display(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? "-" : value;
-    }
-
-    private static string BuildErrorMessage(string userMessage, Exception ex)
-    {
-        if (!System.Diagnostics.Debugger.IsAttached)
-        {
-            return userMessage;
-        }
-
-        var detail = ex.InnerException is null
-            ? ex.Message
-            : $"{ex.Message} | Inner: {ex.InnerException.Message}";
-
-        return $"{userMessage} {detail}";
     }
 
     private sealed record SelectionOption(string Label, string Value);

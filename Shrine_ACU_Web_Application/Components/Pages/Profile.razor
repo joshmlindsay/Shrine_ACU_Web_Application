@@ -492,16 +492,21 @@ else
 
     private static string BuildErrorMessage(string userMessage, Exception ex)
     {
-        if (!System.Diagnostics.Debugger.IsAttached)
+        if (System.Diagnostics.Debugger.IsAttached)
         {
-            return userMessage;
+            var detail = ex.InnerException is null
+                ? ex.Message
+                : $"{ex.Message} | Inner: {ex.InnerException.Message}";
+
+            return $"{userMessage} {detail}";
         }
 
-        var detail = ex.InnerException is null
-            ? ex.Message
-            : $"{ex.Message} | Inner: {ex.InnerException.Message}";
+        if (ex is Microsoft.Kiota.Abstractions.ApiException apiEx)
+        {
+            return $"{userMessage} (server error {apiEx.ResponseStatusCode})";
+        }
 
-        return $"{userMessage} {detail}";
+        return userMessage;
     }
 
     private static string ResolvePaymentProvider(string method)
