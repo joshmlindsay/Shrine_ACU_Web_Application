@@ -34,6 +34,12 @@ public sealed class UserSessionAuthenticationProvider : IAuthenticationProvider
                 var credentials = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{username}:{password}"));
                 request.Headers.Add("Authorization", $"Basic {credentials}");
             }
+
+            var effectiveUserId = session.EffectiveUserId ?? session.CurrentUser.UserId;
+            if (effectiveUserId.HasValue)
+            {
+                request.Headers.Add("X-User-Id", effectiveUserId.Value.ToString());
+            }
         }
 
         return Task.CompletedTask;
