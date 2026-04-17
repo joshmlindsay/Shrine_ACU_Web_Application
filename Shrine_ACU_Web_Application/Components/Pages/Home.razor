@@ -6,14 +6,126 @@
 
 <PageTitle>Home</PageTitle>
 
-<RadzenStack Gap="1rem">
-    <RadzenText TextStyle="TextStyle.H4">Shrine ACU Portal</RadzenText>
+<RadzenStack Gap="1rem" class="home-page">
     @if (!UserSession.IsAuthenticated)
     {
         <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in to use this portal. Click the Login link in the navigation menu.</RadzenAlert>
     }
-    else
-    {
-        <RadzenText>Hello World</RadzenText>
-    }
+
+    <RadzenRow Gap="1rem" class="home-layout">
+        <RadzenColumn Size="12" SizeLG="9">
+            <RadzenStack Gap="1rem">
+                <RadzenCard class="hero-section">
+                    <div class="slideshow" style="--slide-count: @HeroSlides.Count;">
+                        @for (var i = 0; i < HeroSlides.Count; i++)
+                        {
+                            var slide = HeroSlides[i];
+                            var slideStyle = $"--slide-index: {i};";
+                            <div class="slide" style="@slideStyle">
+                                <img src="@slide.ImageUrl" alt="@slide.Title" />
+                                <RadzenStack Gap="0.25rem" class="slide-caption">
+                                    <RadzenText TextStyle="TextStyle.H5">@slide.Title</RadzenText>
+                                    <RadzenText TextStyle="TextStyle.Body1">@slide.Subtitle</RadzenText>
+                                </RadzenStack>
+                            </div>
+                        }
+                    </div>
+                </RadzenCard>
+
+                <RadzenCard class="links-section">
+                    <RadzenText TextStyle="TextStyle.H5" class="section-title">Featured Sponsors & Community Links</RadzenText>
+                    <RadzenRow Gap="0.8rem" class="link-cards">
+                        @foreach (var link in FeaturedLinks)
+                        {
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <a href="@link.Url" target="_blank" rel="noopener noreferrer" class="link-card">
+                                    <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.75rem">
+                                        <RadzenCard class="logo-space">
+                                            @if (!string.IsNullOrWhiteSpace(link.LogoUrl))
+                                            {
+                                                <img src="@link.LogoUrl" alt="@($"{link.Title} logo")" />
+                                            }
+                                            else
+                                            {
+                                                <RadzenText TextStyle="TextStyle.Caption">LOGO</RadzenText>
+                                            }
+                                        </RadzenCard>
+                                        <RadzenStack Gap="0.25rem" class="link-content">
+                                            <RadzenText TextStyle="TextStyle.Subtitle2">@link.Title</RadzenText>
+                                            <RadzenText TextStyle="TextStyle.Body2">@link.Description</RadzenText>
+                                        </RadzenStack>
+                                    </RadzenStack>
+                                </a>
+                            </RadzenColumn>
+                        }
+                    </RadzenRow>
+                </RadzenCard>
+            </RadzenStack>
+        </RadzenColumn>
+
+        <RadzenColumn Size="12" SizeLG="3">
+            <RadzenStack Gap="1rem" class="updates-panel">
+                <RadzenCard class="updates-card">
+                    <RadzenText TextStyle="TextStyle.H5" class="section-title">News</RadzenText>
+                    <RadzenStack Gap="0.65rem">
+                        @foreach (var item in NewsItems)
+                        {
+                            <RadzenStack Gap="0.15rem" class="updates-item">
+                                <RadzenText TextStyle="TextStyle.Subtitle2">@item.Title</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption" class="date-label">@item.DateLabel</RadzenText>
+                            </RadzenStack>
+                        }
+                    </RadzenStack>
+                </RadzenCard>
+
+                <RadzenCard class="updates-card">
+                    <RadzenText TextStyle="TextStyle.H5" class="section-title">Upcoming Events</RadzenText>
+                    <RadzenStack Gap="0.65rem">
+                        @foreach (var item in EventItems)
+                        {
+                            <RadzenStack Gap="0.15rem" class="updates-item">
+                                <RadzenText TextStyle="TextStyle.Subtitle2">@item.Title</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Caption" class="date-label">@item.DateLabel</RadzenText>
+                            </RadzenStack>
+                        }
+                    </RadzenStack>
+                </RadzenCard>
+            </RadzenStack>
+        </RadzenColumn>
+    </RadzenRow>
 </RadzenStack>
+
+@code {
+    private static readonly IReadOnlyList<HomeSlide> HeroSlides =
+    [
+        new("Community Celebration", "Join fellow members and supporters throughout the season.", "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=1400&q=80"),
+        new("Professional Excellence", "Recognizing dedication, service, and craftsmanship.", "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1400&q=80"),
+        new("Supporting Local Causes", "Working together with sponsors and partners for impact.", "https://images.unsplash.com/photo-1556761175-b413da4baf72?auto=format&fit=crop&w=1400&q=80")
+    ];
+
+    private static readonly IReadOnlyList<HomeItem> NewsItems =
+    [
+        new("Board meeting notes are now available", "March 5, 2026"),
+        new("Sponsorship package updates published", "March 10, 2026"),
+        new("Volunteer sign-up portal has reopened", "March 15, 2026")
+    ];
+
+    private static readonly IReadOnlyList<HomeItem> EventItems =
+    [
+        new("Monthly Membership Luncheon", "April 12, 2026"),
+        new("Fundraiser Kickoff Night", "April 26, 2026"),
+        new("Summer Car Show Planning Session", "May 8, 2026")
+    ];
+
+    private static readonly IReadOnlyList<HomeLink> FeaturedLinks =
+    [
+        new("Premier Auto Group", "Main event sponsor and partner resource hub.", "https://example.com", string.Empty),
+        new("Community Foundation", "Support and giving opportunities for local initiatives.", "https://example.com", string.Empty),
+        new("Vendor Registration", "Sign up your business for booths and event space.", "https://example.com", string.Empty),
+        new("Media Resources", "Press kits, downloadable logos, and event highlights.", "https://example.com", string.Empty)
+    ];
+
+    private sealed record HomeSlide(string Title, string Subtitle, string ImageUrl);
+    private sealed record HomeItem(string Title, string DateLabel);
+    private sealed record HomeLink(string Title, string Description, string Url, string LogoUrl);
+}
