@@ -412,27 +412,80 @@ else
         {
             var response = await Client.Api.CarShows.GetAsync();
             carShows = response?.Where(x => x.ShowId.HasValue).OrderBy(x => x.Name).ToList() ?? [];
-        }
-        catch (Exception primaryEx)
-        {
-            try
-            {
-                var activeResponse = await Client.Api.CarShows.Active.GetAsync();
-                carShows = activeResponse?.Where(x => x.ShowId.HasValue).OrderBy(x => x.Name).ToList() ?? [];
 
-                if (!carShows.Any())
-                {
-                    errorMessage = $"Unable to load shows. {primaryEx.Message}";
-                }
-                else
-                {
-                    successMessage = "Loaded active shows using fallback query.";
-                }
-            }
-            catch
+            if (carShows.Any())
             {
-                errorMessage = $"Unable to load shows. {primaryEx.Message}";
+                return;
             }
+        }
+        catch
+        {
+        }
+
+        if (await TryLoadShowsFromEntriesAsync())
+        {
+            return;
+        }
+
+        try
+        {
+            var activeResponse = await Client.Api.CarShows.Active.GetAsync();
+            carShows = activeResponse?.Where(x => x.ShowId.HasValue).OrderBy(x => x.Name).ToList() ?? [];
+
+            if (!carShows.Any())
+            {
+                errorMessage = "Unable to load shows.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load shows. {ex.Message}";
+        }
+    }
+
+    private async Task<bool> TryLoadShowsFromEntriesAsync()
+    {
+        try
+        {
+            var allEntries = await Client.Api.CarShowEntries.GetAsync() ?? [];
+            var showIds = allEntries
+                .Where(x => x.ShowId.HasValue)
+                .Select(x => x.ShowId!.Value)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList();
+
+            if (!showIds.Any())
+            {
+                return false;
+            }
+
+            var fallbackShows = new List<CarShowDto>();
+            foreach (var showId in showIds)
+            {
+                try
+                {
+                    var show = await Client.Api.CarShows[showId].GetAsync();
+                    if (show?.ShowId.HasValue == true)
+                    {
+                        fallbackShows.Add(show);
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            carShows = fallbackShows
+                .OrderBy(x => x.Name)
+                .ThenBy(x => x.ShowId)
+                .ToList();
+
+            return carShows.Any();
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -1005,7 +1058,7 @@ else
             {
                 var users = await Client.Api.AppUsers.GetAsync() ?? [];
                 judgeOptions = users
-                    .Where(x => x.IsActive != false && x.ApplicationAccesses != null && x.ApplicationAccesses.Any(y => y.AccessRoles.HasValue && y.AccessRoles.Value.HasFlag(UserAccessRole.Judge)))
+                    .Where(x => x.IsActive != false && x.ApplicationAccesses?.Any(y => (y.AccessRoles ?? UserAccessRole.None).HasFlag(UserAccessRole.Judge)) == true)
                     .Select(x => new JudgeOption { DisplayName = GetUserDisplayName(x) })
                     .Where(x => !string.IsNullOrWhiteSpace(x.DisplayName))
                     .GroupBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
