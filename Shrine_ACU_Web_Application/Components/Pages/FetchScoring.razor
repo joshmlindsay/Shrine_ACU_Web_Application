@@ -427,20 +427,12 @@ else
             return;
         }
 
-        try
+        if (await TryLoadShowsFromScoringQuestionsAsync())
         {
-            var activeResponse = await Client.Api.CarShows.Active.GetAsync();
-            carShows = activeResponse?.Where(x => x.ShowId.HasValue).OrderBy(x => x.Name).ToList() ?? [];
+            return;
+        }
 
-            if (!carShows.Any())
-            {
-                errorMessage = "Unable to load shows.";
-            }
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"Unable to load shows. {ex.Message}";
-        }
+        errorMessage = "Unable to load shows. The show endpoints are currently unavailable.";
     }
 
     private async Task<bool> TryLoadShowsFromEntriesAsync()
@@ -460,28 +452,48 @@ else
                 return false;
             }
 
-            var fallbackShows = new List<CarShowDto>();
-            foreach (var showId in showIds)
-            {
-                try
+            carShows = showIds
+                .Select(showId => new CarShowDto
                 {
-                    var show = await Client.Api.CarShows[showId].GetAsync();
-                    if (show?.ShowId.HasValue == true)
-                    {
-                        fallbackShows.Add(show);
-                    }
-                }
-                catch
-                {
-                }
-            }
-
-            carShows = fallbackShows
-                .OrderBy(x => x.Name)
-                .ThenBy(x => x.ShowId)
+                    ShowId = showId,
+                    Name = $"Show {showId}"
+                })
                 .ToList();
 
-            return carShows.Any();
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task<bool> TryLoadShowsFromScoringQuestionsAsync()
+    {
+        try
+        {
+            var allQuestions = await Client.Api.CarShowScoringQuestions.GetAsync() ?? [];
+            var showIds = allQuestions
+                .Where(x => x.ShowId.HasValue)
+                .Select(x => x.ShowId!.Value)
+                .Distinct()
+                .OrderBy(x => x)
+                .ToList();
+
+            if (!showIds.Any())
+            {
+                return false;
+            }
+
+            carShows = showIds
+                .Select(showId => new CarShowDto
+                {
+                    ShowId = showId,
+                    Name = $"Show {showId}"
+                })
+                .ToList();
+
+            return true;
         }
         catch
         {
