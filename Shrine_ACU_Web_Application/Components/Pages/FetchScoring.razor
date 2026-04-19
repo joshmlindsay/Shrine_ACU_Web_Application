@@ -67,7 +67,8 @@ else
                                         TextProperty="DisplayName"
                                         ValueProperty="DisplayName"
                                         @bind-Value="judgeName"
-                                        Disabled="@(!CanEditSelectedEntry)"
+                                        Change="@OnJudgeChanged"
+                                        Disabled="@(!CanSelectJudge)"
                                         AllowClear="true"
                                         AllowFiltering="true"
                                         Placeholder="Select a judge"
@@ -382,6 +383,8 @@ else
 
     private bool CanEditSelectedEntry => UserSession.CanEditEntry(SelectedEntry);
 
+    private bool CanSelectJudge => UserSession.IsAdmin;
+
     private bool CanRunFinalScores => UserSession.CanManage && selectedShowId.HasValue;
 
     protected override async Task OnInitializedAsync()
@@ -478,6 +481,29 @@ else
         await LoadEntryAsync(showBusy: true);
     }
 
+    private async Task OnJudgeChanged(object? _)
+    {
+        if (!CanSelectJudge)
+        {
+            judgeName = UserSession.EffectiveDisplayName;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(judgeName))
+        {
+            SetDefaultJudgeName();
+        }
+
+        ResetMessages();
+
+        if (!selectedEntryId.HasValue)
+        {
+            return;
+        }
+
+        await LoadEntryAsync(showBusy: true);
+    }
+
     private async Task RefreshEntryAsync()
     {
         ResetMessages();
@@ -516,12 +542,19 @@ else
             return;
         }
 
+        SetDefaultJudgeName();
+
         var loadTask = async () =>
         {
             questionAnswers = BuildQuestionAnswerModels();
 
             var loadedAnswers = await Client.Api.CarShowAnswers.Entry[selectedEntryId.Value].GetAsync() ?? [];
-            existingAnswersByQuestionId = loadedAnswers
+            var selectedJudge = GetSelectedJudgeName();
+            var filteredAnswers = string.IsNullOrWhiteSpace(selectedJudge)
+                ? loadedAnswers
+                : loadedAnswers.Where(a => string.Equals(a.JudgedBy?.Trim(), selectedJudge, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            existingAnswersByQuestionId = filteredAnswers
                 .Where(a => a.QuestionId.HasValue)
                 .GroupBy(a => a.QuestionId!.Value)
                 .ToDictionary(
@@ -543,17 +576,6 @@ else
                 question.AnsweredDate = savedAnswer.AnsweredDate;
                 question.LastModified = savedAnswer.LastModified;
                 question.SavedBy = savedAnswer.JudgedBy;
-            }
-
-            if (string.IsNullOrWhiteSpace(judgeName))
-            {
-                judgeName = loadedAnswers
-                    .OrderByDescending(x => x.LastModified ?? x.AnsweredDate ?? DateTimeOffset.MinValue)
-                    .Select(x => x.JudgedBy)
-                    .FirstOrDefault(x => !string.IsNullOrWhiteSpace(x));
-
-                EnsureJudgeOption(judgeName);
-                SetDefaultJudgeName();
             }
 
             scorePreview = await Client.Api.CarShowScoreCalculations.Show[selectedShowId.Value].Entry[selectedEntryId.Value].GetAsync();
@@ -603,7 +625,8 @@ else
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(judgeName))
+        var selectedJudge = GetSelectedJudgeName();
+        if (string.IsNullOrWhiteSpace(selectedJudge))
         {
             errorMessage = "Please select judge name.";
             return;
@@ -640,7 +663,7 @@ else
                             BooleanAnswer = question.IsBoolean ? question.BooleanAnswer : null,
                             TextAnswer = question.IsNumeric || question.IsBoolean ? null : NullIfWhiteSpace(question.TextAnswer),
                             Comments = NullIfWhiteSpace(question.Comments),
-                            JudgedBy = judgeName?.Trim(),
+                            JudgedBy = selectedJudge,
                             AnsweredDate = existingAnswer?.AnsweredDate ?? now,
                             LastModified = now
                         };
@@ -659,8 +682,8 @@ else
                     }
                     else if (existingAnswer?.AnswerId is int answerId)
                     {
-                        await Client.Api.CarShowAnswers[answerId].DeleteAsync();
-                        deletedCount++;
+                    await Client.Api.CarShowAnswers[answerId].DeleteAsync();
+                    deletedCount++;
                     }
                 }
 
@@ -822,7 +845,7 @@ else
         scorePreview = null;
         selectedFinalScore = null;
         selectedEntryId = null;
-        judgeName = null;
+        judgeName = CanSelectJudge ? null : UserSession.EffectiveDisplayName;
     }
 
     private void ResetMessages()
@@ -961,27 +984,47 @@ else
     {
         try
         {
-            var users = await Client.Api.AppUsers.GetAsync() ?? [];
-            judgeOptions = users
-                .Where(x => x.IsActive != false)
-                .Select(x => new JudgeOption { DisplayName = GetUserDisplayName(x) })
-                .Where(x => !string.IsNullOrWhiteSpace(x.DisplayName))
-                .GroupBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .Select(g => g.First())
-                .OrderBy(x => x.DisplayName)
-                .ToList();
+            if (UserSession.IsAdmin)
+            {
+                var users = await Client.Api.AppUsers.GetAsync() ?? [];
+                judgeOptions = users
+                    .Where(x => x.IsActive != false && x.ApplicationAccesses != null && x.ApplicationAccesses.Any(y => y.AccessRoles.HasValue && y.AccessRoles.Value.HasFlag(UserAccessRole.Judge)))
+                    .Select(x => new JudgeOption { DisplayName = GetUserDisplayName(x) })
+                    .Where(x => !string.IsNullOrWhiteSpace(x.DisplayName))
+                    .GroupBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
+                    .Select(g => g.First())
+                    .OrderBy(x => x.DisplayName)
+                    .ToList();
 
-            EnsureJudgeOption(UserSession.EffectiveDisplayName);
+                EnsureJudgeOption(UserSession.EffectiveDisplayName);
+            }
+            else
+            {
+                judgeOptions = [];
+                EnsureJudgeOption(UserSession.EffectiveDisplayName);
+                judgeName = UserSession.EffectiveDisplayName;
+            }
         }
         catch
         {
             judgeOptions = [];
             EnsureJudgeOption(UserSession.EffectiveDisplayName);
+            if (!UserSession.IsAdmin)
+            {
+                judgeName = UserSession.EffectiveDisplayName;
+            }
         }
     }
 
     private void SetDefaultJudgeName()
     {
+        if (!CanSelectJudge)
+        {
+            judgeName = UserSession.EffectiveDisplayName;
+            EnsureJudgeOption(judgeName);
+            return;
+        }
+
         if (!string.IsNullOrWhiteSpace(judgeName))
         {
             return;
@@ -1013,6 +1056,16 @@ else
 
         judgeOptions.Add(new JudgeOption { DisplayName = value.Trim() });
         judgeOptions = judgeOptions.OrderBy(x => x.DisplayName).ToList();
+    }
+
+    private string? GetSelectedJudgeName()
+    {
+        if (!CanSelectJudge)
+        {
+            return NullIfWhiteSpace(UserSession.EffectiveDisplayName);
+        }
+
+        return NullIfWhiteSpace(judgeName);
     }
 
     private static string GetUserDisplayName(AppUserDto? user)
