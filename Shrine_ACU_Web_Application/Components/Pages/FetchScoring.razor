@@ -413,9 +413,26 @@ else
             var response = await Client.Api.CarShows.GetAsync();
             carShows = response?.Where(x => x.ShowId.HasValue).OrderBy(x => x.Name).ToList() ?? [];
         }
-        catch (Exception ex)
+        catch (Exception primaryEx)
         {
-            errorMessage = $"Unable to load shows. {ex.Message}";
+            try
+            {
+                var activeResponse = await Client.Api.CarShows.Active.GetAsync();
+                carShows = activeResponse?.Where(x => x.ShowId.HasValue).OrderBy(x => x.Name).ToList() ?? [];
+
+                if (!carShows.Any())
+                {
+                    errorMessage = $"Unable to load shows. {primaryEx.Message}";
+                }
+                else
+                {
+                    successMessage = "Loaded active shows using fallback query.";
+                }
+            }
+            catch
+            {
+                errorMessage = $"Unable to load shows. {primaryEx.Message}";
+            }
         }
     }
 
