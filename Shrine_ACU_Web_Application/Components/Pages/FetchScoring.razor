@@ -3,6 +3,9 @@
 @inject AcuCarShowClient Client
 @inject NavigationManager Navigation
 @inject UserSessionService UserSession
+@inject IJSRuntime JSRuntime
+@using System.Globalization
+@using System.Text.Json
 
 <PageTitle>Scoring</PageTitle>
 
@@ -302,7 +305,7 @@ else
                                 <RadzenText TextStyle="TextStyle.H6">@DisplayScore(selectedFinalScore.Score)</RadzenText>
                                 <RadzenText TextStyle="TextStyle.Caption">Calculated: @DisplayDateTime(selectedFinalScore.CalculatedDate)</RadzenText>
                                 <RadzenText TextStyle="TextStyle.Caption">VIN: @Display(selectedFinalScore.Vin)</RadzenText>
-                                <RadzenText>@Display(selectedFinalScore.CalculationSummary)</RadzenText>
+                                <RadzenText>@FormatCalculationSummary(selectedFinalScore.CalculationSummary)</RadzenText>
                             }
                         </RadzenStack>
                     </RadzenCard>
@@ -351,6 +354,10 @@ else
         new() { Text = "Yes", Value = true },
         new() { Text = "No", Value = false }
     ];
+
+#if DEBUG
+    private readonly Queue<string> pendingBrowserErrorLogs = [];
+#endif
 
     private List<CarShowDto> carShows = [];
     private List<CarShowEntryDto> entries = [];
@@ -406,6 +413,13 @@ else
         await LoadShowsAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+#if DEBUG
+        await FlushBrowserErrorLogsAsync();
+#endif
+    }
+
     private async Task LoadShowsAsync()
     {
         try
@@ -418,8 +432,9 @@ else
                 return;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            await LogBrowserErrorAsync("LoadShowsAsync: CarShows.GetAsync", ex);
         }
 
         if (await TryLoadShowsFromEntriesAsync())
@@ -462,8 +477,9 @@ else
 
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            await LogBrowserErrorAsync("TryLoadShowsFromEntriesAsync", ex);
             return false;
         }
     }
@@ -495,8 +511,9 @@ else
 
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            await LogBrowserErrorAsync("TryLoadShowsFromScoringQuestionsAsync", ex);
             return false;
         }
     }
@@ -857,9 +874,98 @@ else
                 Vin = score.Vin ?? "-",
                 Score = score.Score,
                 CalculatedDate = score.CalculatedDate,
-                CalculationSummary = score.CalculationSummary ?? "-"
+                CalculationSummary = FormatCalculationSummary(score.CalculationSummary)
             })
             .ToList();
+    }
+
+    private static string FormatCalculationSummary(string? summary)
+    {
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return "-";
+        }
+
+        var trimmed = summary.Trim();
+        if (!trimmed.StartsWith("{", StringComparison.Ordinal) && !trimmed.StartsWith("[", StringComparison.Ordinal))
+        {
+            return trimmed;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(trimmed);
+            var root = document.RootElement;
+
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return trimmed;
+            }
+
+            var segments = new List<string>();
+
+            if (root.TryGetProperty("GroupCalculationScores", out var groupCalculations) && groupCalculations.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var calc in groupCalculations.EnumerateArray())
+                {
+                    var name = GetJsonString(calc, "CalculationName") ?? "Final";
+                    var score = GetJsonDouble(calc, "Score");
+                    if (score.HasValue)
+                    {
+                        segments.Add($"{name}: {score.Value.ToString("0.##", CultureInfo.InvariantCulture)}");
+                    }
+                }
+            }
+
+            if (root.TryGetProperty("QuestionGroupScores", out var questionGroups) && questionGroups.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var group in questionGroups.EnumerateArray())
+                {
+                    var name = GetJsonString(group, "GroupName") ?? "Group";
+                    var score = GetJsonDouble(group, "Score");
+                    if (score.HasValue)
+                    {
+                        segments.Add($"{name}: {score.Value.ToString("0.##", CultureInfo.InvariantCulture)}");
+                    }
+                }
+            }
+
+            return segments.Count > 0 ? string.Join(" | ", segments) : trimmed;
+        }
+        catch
+        {
+            return trimmed;
+        }
+    }
+
+    private static string? GetJsonString(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property) || property.ValueKind != JsonValueKind.String)
+        {
+            return null;
+        }
+
+        return property.GetString();
+    }
+
+    private static double? GetJsonDouble(JsonElement element, string propertyName)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return null;
+        }
+
+        if (property.ValueKind == JsonValueKind.Number && property.TryGetDouble(out var numberValue))
+        {
+            return numberValue;
+        }
+
+        if (property.ValueKind == JsonValueKind.String && double.TryParse(property.GetString(), NumberStyles.Any, CultureInfo.InvariantCulture, out var parsedValue))
+        {
+            return parsedValue;
+        }
+
+        return null;
     }
 
     private List<QuestionAnswerModel> BuildQuestionAnswerModels()
@@ -1087,8 +1193,9 @@ else
                 judgeName = UserSession.EffectiveDisplayName;
             }
         }
-        catch
+        catch (Exception ex)
         {
+            await LogBrowserErrorAsync("LoadJudgeOptionsAsync", ex);
             judgeOptions = [];
             EnsureJudgeOption(UserSession.EffectiveDisplayName);
             if (!UserSession.IsAdmin)
@@ -1164,6 +1271,50 @@ else
         }
 
         return user?.Username ?? string.Empty;
+    }
+
+    private async Task LogBrowserErrorAsync(string context, Exception ex)
+    {
+#if DEBUG
+        var errorCode = GetErrorCode(ex);
+        var message = $"[FetchScoring] {context}: {errorCode}";
+
+        pendingBrowserErrorLogs.Enqueue(message);
+        await FlushBrowserErrorLogsAsync();
+#endif
+    }
+
+#if DEBUG
+    private async Task FlushBrowserErrorLogsAsync()
+    {
+        while (pendingBrowserErrorLogs.Count > 0)
+        {
+            var message = pendingBrowserErrorLogs.Peek();
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("console.error", message);
+                pendingBrowserErrorLogs.Dequeue();
+            }
+            catch
+            {
+                return;
+            }
+        }
+    }
+#endif
+
+    private static string GetErrorCode(Exception ex)
+    {
+        var statusProperty = ex.GetType().GetProperty("ResponseStatusCode");
+        var statusValue = statusProperty?.GetValue(ex);
+
+        if (statusValue is int code)
+        {
+            return code.ToString();
+        }
+
+        var match = System.Text.RegularExpressions.Regex.Match(ex.Message ?? string.Empty, @"\b(\d{3})\b");
+        return match.Success ? match.Groups[1].Value : "unknown";
     }
 
     private sealed class EntryOption
