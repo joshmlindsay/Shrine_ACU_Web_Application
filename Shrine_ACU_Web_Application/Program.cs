@@ -55,11 +55,25 @@ builder.Services.AddScoped<AcuCarShowClient.AcuCarShowClient>((sp) =>
 
 var app = builder.Build();
 
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+logger.LogInformation("Application starting. Environment: {Environment}", app.Environment.EnvironmentName);
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseExceptionHandler(errorApp =>
+    {
+        errorApp.Run(async context =>
+        {
+            var exceptionFeature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+            if (exceptionFeature?.Error is not null)
+            {
+                var errorLogger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+                errorLogger.LogError(exceptionFeature.Error, "Unhandled exception for {Path}", context.Request.Path);
+            }
+            context.Response.Redirect("/Error");
+        });
+    });
     app.UseHsts();
 }
 else
