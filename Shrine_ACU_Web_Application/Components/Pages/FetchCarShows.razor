@@ -79,27 +79,19 @@ else
                 </RadzenRow>
             }
 
-            <RadzenDataGrid Data="@FilteredEntries" TItem="CarShowEntryDto" AllowPaging="true" PageSize="10" EmptyText="No entries found for this selection.">
+            <RadzenDataGrid Data="@FilteredResults" TItem="CarShowResult" AllowPaging="true" AllowSorting="true" PageSize="10" EmptyText="No entries found for this selection.">
                 <Columns>
-                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Owner">
-                        <Template Context="entry">@Display(entry.CarDetail?.Owner)</Template>
+                    <RadzenDataGridColumn TItem="CarShowResult" Property="Owner" Title="Owner" />
+                    <RadzenDataGridColumn TItem="CarShowResult" Property="CarType" Title="Car Type" />
+                    <RadzenDataGridColumn TItem="CarShowResult" Property="ClassName" Title="Class" />
+                    <RadzenDataGridColumn TItem="CarShowResult" Property="Placement" Title="Placement" />
+                    <RadzenDataGridColumn TItem="CarShowResult" Property="FinalScore" Title="Final Score">
+                        <Template Context="result">@(result.FinalScore?.ToString("0.##") ?? "-")</Template>
                     </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Car Type">
-                        <Template Context="entry">@DisplayCarType(entry.CarDetail)</Template>
-                    </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Class">
-                        <Template Context="entry">@DisplayClass(entry.ClassId)</Template>
-                    </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="Placement" Title="Placement">
-                        <Template Context="entry">@Display(entry.Placement)</Template>
-                    </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Final Score">
-                        <Template Context="entry">@DisplayFinalScore(entry.EntryId)</Template>
-                    </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="CarShowEntryDto" Property="EntryNumber" Title="#" Width="80px" />
-                    <RadzenDataGridColumn TItem="CarShowEntryDto" Title="Details" Sortable="false" Filterable="false" Width="110px">
-                        <Template Context="entry">
-                            <RadzenButton Text="Details" Size="ButtonSize.Small" Click="@(async _ => await OpenDetails(entry))" />
+                    <RadzenDataGridColumn TItem="CarShowResult" Property="EntryNumber" Title="#" Width="80px" />
+                    <RadzenDataGridColumn TItem="CarShowResult" Title="Details" Sortable="false" Filterable="false" Width="110px">
+                        <Template Context="result">
+                            <RadzenButton Text="Details" Size="ButtonSize.Small" Click="@(async _ => await OpenDetails(result.Entry))" />
                         </Template>
                     </RadzenDataGridColumn>
                 </Columns>
@@ -111,6 +103,7 @@ else
 @code {
     private List<CarShowDto> carShows = [];
     private List<CarShowEntryDto> entries = [];
+    private List<CarShowResult> results = [];
     private List<CarShowClassDto> eventClasses = [];
     private Dictionary<int, CarShowFinalScoreDto> finalScoresByEntryId = [];
     private CarShowDto? selectedShow;
@@ -120,15 +113,11 @@ else
     private string? errorMessage;
     private string? successMessage;
 
-    private IEnumerable<CarShowEntryDto> FilteredEntries => selectedClassId.HasValue
-        ? entries.Where(entry => entry.ClassId == selectedClassId.Value)
-        : entries;
+    private IEnumerable<CarShowResult> FilteredResults => selectedClassId.HasValue
+        ? results.Where(result => result.ClassId == selectedClassId.Value)
+        : results;
 
     private string DisplayClass(int? classId) => eventClasses.FirstOrDefault(item => item.ClassId == classId)?.ClassName ?? "-";
-
-    private string DisplayFinalScore(int? entryId) => entryId.HasValue && finalScoresByEntryId.TryGetValue(entryId.Value, out var score)
-        ? score.Score?.ToString("0.##") ?? "-"
-        : "-";
 
     private static string DisplayCarType(CarDetailDto? carDetail)
     {
@@ -164,6 +153,7 @@ else
         {
             selectedShow = null;
             entries = [];
+            results = [];
             eventClasses = [];
             finalScoresByEntryId = [];
             selectedClassId = null;
@@ -192,12 +182,22 @@ else
                 .Where(item => item.EntryId.HasValue)
                 .GroupBy(item => item.EntryId!.Value)
                 .ToDictionary(group => group.Key, group => group.OrderByDescending(item => item.CalculatedDate).First());
+            results = entries.Select(entry => new CarShowResult(
+                entry,
+                entry.CarDetail?.Owner ?? "-",
+                DisplayCarType(entry.CarDetail),
+                DisplayClass(entry.ClassId),
+                entry.Placement ?? "-",
+                entry.EntryId.HasValue && finalScoresByEntryId.TryGetValue(entry.EntryId.Value, out var score) ? score.Score : null,
+                entry.EntryNumber,
+                entry.ClassId)).ToList();
             selectedClassId = null;
         }
         catch (Exception ex)
         {
             selectedShow = null;
             entries = [];
+            results = [];
             eventClasses = [];
             finalScoresByEntryId = [];
             errorMessage = $"Unable to load show details. {ex.Message}";
@@ -381,6 +381,16 @@ else
             || ex.Message.Contains("rowversion", StringComparison.OrdinalIgnoreCase)
             || ex.Message.Contains("row version", StringComparison.OrdinalIgnoreCase);
     }
+
+    private sealed record CarShowResult(
+        CarShowEntryDto Entry,
+        string Owner,
+        string CarType,
+        string ClassName,
+        string Placement,
+        double? FinalScore,
+        int? EntryNumber,
+        int? ClassId);
 
     private static string Display(string? value)
     {
