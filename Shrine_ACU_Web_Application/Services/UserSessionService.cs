@@ -1,5 +1,6 @@
 using global::AcuCarShowClient;
 using AcuCarShowClient.Models;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
 using System.Text.Json;
 
@@ -11,12 +12,14 @@ public sealed class UserSessionService
     private const string EffectiveUserStorageKey = "shrine_effective_user";
 
     private readonly global::AcuCarShowClient.AcuCarShowClient _client;
+    private readonly ILogger<UserSessionService> _logger;
     private readonly List<AppUserDto> _availableUsers = [];
     private IJSRuntime? _jsRuntime;
 
-    public UserSessionService(global::AcuCarShowClient.AcuCarShowClient client)
+    public UserSessionService(global::AcuCarShowClient.AcuCarShowClient client, ILogger<UserSessionService> logger)
     {
         _client = client;
+        _logger = logger;
     }
 
     public event Action? StateChanged;
@@ -73,9 +76,12 @@ public sealed class UserSessionService
                 EffectiveUser = JsonSerializer.Deserialize<AppUserDto>(effectiveUserJson);
             }
 
-            if (IsAuthenticated && CanManageUsers)
+            if (IsAuthenticated)
             {
-                await LoadAvailableUsersAsync();
+                // Roles/permissions (e.g. being granted judge access) can change server-side
+                // after this session was cached in localStorage, so refresh the current user's
+                // access from the API on every app load instead of trusting the cached snapshot.
+                await RefreshCurrentUserAsync();
             }
         }
         catch
@@ -106,10 +112,13 @@ public sealed class UserSessionService
                 return LoginResult.Fail("Invalid username or password.");
             }
 
-            if (user.UserId.HasValue && (user.ApplicationAccesses is null || user.ApplicationAccesses.Count == 0))
-            {
-                user.ApplicationAccesses = await _client.Api.UserApplicationAccess.User[user.UserId.Value].GetAsync() ?? [];
-            }
+            // The AppUsers/username endpoint can return a stale or partial ApplicationAccesses
+            // collection (e.g. missing the AccessRoles granted after this record was last
+            // synced), so always refresh from the authoritative UserApplicationAccess endpoint
+            // rather than only filling in when it's missing entirely. This mirrors how
+            // ManageUsers.razor loads access data and ensures role changes (like being made a
+            // judge) take effect immediately on the user's next login.
+            await RefreshApplicationAccessesAsync(user);
 
             CurrentUser = user;
             EffectiveUser = user;
@@ -149,10 +158,10 @@ public sealed class UserSessionService
                 return OperationResult.Fail("Unable to refresh user profile.");
             }
 
-            if (refreshed.UserId.HasValue && (refreshed.ApplicationAccesses is null || refreshed.ApplicationAccesses.Count == 0))
-            {
-                refreshed.ApplicationAccesses = await _client.Api.UserApplicationAccess.User[refreshed.UserId.Value].GetAsync() ?? [];
-            }
+            // Always refresh from the authoritative UserApplicationAccess endpoint rather than
+            // only when the profile response is missing accesses entirely - see LoginAsync for
+            // details on why a partial/stale collection must not be trusted as-is.
+            await RefreshApplicationAccessesAsync(refreshed);
 
             CurrentUser = refreshed;
             EffectiveUser ??= refreshed;
@@ -368,6 +377,28 @@ public sealed class UserSessionService
         }
         catch
         {
+        }
+    }
+
+    // Always refreshes ApplicationAccesses from the authoritative UserApplicationAccess endpoint
+    // rather than only when the caller's collection is null/empty, because that collection can be
+    // stale or partial (e.g. missing a role granted after it was last synced). Falls back to
+    // whatever data the user already has if the refresh call itself fails.
+    private async Task RefreshApplicationAccessesAsync(AppUserDto user)
+    {
+        if (!user.UserId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            user.ApplicationAccesses = await _client.Api.UserApplicationAccess.User[user.UserId.Value].GetAsync() ?? user.ApplicationAccesses ?? [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Unable to refresh application accesses for user {UserId}. Falling back to existing data.", user.UserId);
+            user.ApplicationAccesses ??= [];
         }
     }
 
