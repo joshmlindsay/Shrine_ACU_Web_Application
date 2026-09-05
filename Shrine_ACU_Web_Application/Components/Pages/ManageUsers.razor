@@ -1,0 +1,250 @@
+@page "/manage-users"
+@rendermode InteractiveServer
+
+@inject AcuCarShowClient Client
+@inject UserSessionService UserSession
+@inject DialogService DialogService
+@inject IWebHostEnvironment Environment
+
+<PageTitle>Manage Users</PageTitle>
+
+@if (!UserSession.IsAuthenticated)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in to manage users.</RadzenAlert>
+}
+else if (!UserSession.CanManageUsers)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">Your account does not have permission to manage users.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1rem">
+        <RadzenRow AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+            <RadzenColumn Size="12" SizeMD="8">
+                <RadzenText TextStyle="TextStyle.H4">Manage Users</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">Delegate users as judges, revoke judge access, or permanently delete accounts.</RadzenText>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenButton Text="Refresh" Icon="refresh" ButtonStyle="ButtonStyle.Light" Disabled="isBusy" Click="LoadUsersAsync" />
+            </RadzenColumn>
+        </RadzenRow>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(successMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Success">@successMessage</RadzenAlert>
+        }
+
+        @if (isBusy)
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+                <RadzenText TextStyle="TextStyle.Body2">Loading users...</RadzenText>
+            </RadzenStack>
+        }
+        else
+        {
+            <RadzenDataGrid Data="@users" TItem="AppUserDto" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" EmptyText="No users were found.">
+                <Columns>
+                    <RadzenDataGridColumn TItem="AppUserDto" Property="DisplayName" Title="Name">
+                        <Template Context="user">@GetDisplayName(user)</Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="AppUserDto" Property="Username" Title="Username" />
+                    <RadzenDataGridColumn TItem="AppUserDto" Property="Email" Title="Email" />
+                    <RadzenDataGridColumn TItem="AppUserDto" Title="Judge">
+                        <Template Context="user">
+                            <RadzenBadge Text="@(IsJudge(user) ? "Judge" : "Not a judge")" BadgeStyle="@(IsJudge(user) ? BadgeStyle.Info : BadgeStyle.Light)" />
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="AppUserDto" Title="Actions" Sortable="false" Filterable="false">
+                        <Template Context="user">
+                            <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                <RadzenButton Text="@(IsJudge(user) ? "Revoke Judge" : "Make Judge")" Icon="@(IsJudge(user) ? "person_remove" : "gavel")" Size="ButtonSize.Small" ButtonStyle="@(IsJudge(user) ? ButtonStyle.Light : ButtonStyle.Primary)" Disabled="isBusy" Click="@(() => ToggleJudgeAsync(user))" />
+                                <RadzenButton Text="Delete" Icon="delete_forever" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Disabled="@(isBusy || user.UserId == UserSession.CurrentUser?.UserId)" Click="@(() => DeleteUserAsync(user))" />
+                            </RadzenStack>
+                        </Template>
+                    </RadzenDataGridColumn>
+                </Columns>
+            </RadzenDataGrid>
+        }
+    </RadzenStack>
+}
+
+@code {
+    private List<AppUserDto> users = [];
+    private bool isBusy;
+    private string? errorMessage;
+    private string? successMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (UserSession.IsAuthenticated && UserSession.CanManageUsers)
+        {
+            await LoadUsersAsync();
+        }
+    }
+
+    private async Task LoadUsersAsync()
+    {
+        ResetMessages();
+        isBusy = true;
+
+        try
+        {
+            users = (await Client.Api.AppUsers.GetAsync() ?? []).OrderBy(GetDisplayName).ToList();
+
+            foreach (var user in users.Where(user => user.UserId.HasValue))
+            {
+                user.ApplicationAccesses = await Client.Api.UserApplicationAccess.User[user.UserId!.Value].GetAsync() ?? [];
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load users.", ex);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private static bool IsJudge(AppUserDto user) =>
+        user.ApplicationAccesses?.Any(access => access.AccessRoles.HasValue && access.AccessRoles.Value.HasFlag(UserAccessRole.Judge)) == true;
+
+    private static string GetDisplayName(AppUserDto user)
+    {
+        if (!string.IsNullOrWhiteSpace(user.DisplayName))
+        {
+            return user.DisplayName;
+        }
+
+        var name = string.Join(' ', new[] { user.FirstName, user.LastName }.Where(value => !string.IsNullOrWhiteSpace(value)));
+        return string.IsNullOrWhiteSpace(name) ? user.Username ?? "Unknown user" : name;
+    }
+
+    private string BuildErrorMessage(string message, Exception exception) =>
+        Environment.IsDevelopment() ? $"{message} {exception.Message}" : message;
+
+    private void ResetMessages()
+    {
+        errorMessage = null;
+        successMessage = null;
+    }
+
+    private async Task ToggleJudgeAsync(AppUserDto user)
+    {
+        if (user.UserId is not int userId)
+        {
+            errorMessage = "The selected user does not have a valid identifier.";
+            return;
+        }
+
+        ResetMessages();
+        isBusy = true;
+
+        try
+        {
+            var accesses = user.ApplicationAccesses ?? [];
+            var judgeAccess = accesses.FirstOrDefault(access =>
+                access.AccessRoles.HasValue && access.AccessRoles.Value.HasFlag(UserAccessRole.Judge));
+
+            if (judgeAccess is null)
+            {
+                var existingAccess = accesses.FirstOrDefault(access => access.UserApplicationAccessId.HasValue);
+
+                if (existingAccess?.UserApplicationAccessId is int accessId)
+                {
+                    existingAccess.AccessRoles = (existingAccess.AccessRoles ?? UserAccessRole.None) | UserAccessRole.Judge;
+                    existingAccess.CanRead = true;
+                    existingAccess.CanWrite = true;
+                    await Client.Api.UserApplicationAccess[accessId].PutAsync(existingAccess);
+                }
+                else
+                {
+                    await Client.Api.UserApplicationAccess.PostAsync(new UserApplicationAccessDto
+                    {
+                        UserId = userId,
+                        AccessRoles = UserAccessRole.Judge,
+                        CanRead = true,
+                        CanWrite = true,
+                        CanManage = false,
+                        GrantedDate = DateTimeOffset.UtcNow
+                    });
+                }
+
+                successMessage = $"{GetDisplayName(user)} can now score entries as a judge.";
+            }
+            else if (judgeAccess.UserApplicationAccessId is int judgeAccessId)
+            {
+                var remainingRoles = judgeAccess.AccessRoles!.Value & ~UserAccessRole.Judge;
+
+                if (remainingRoles == UserAccessRole.None)
+                {
+                    await Client.Api.UserApplicationAccess[judgeAccessId].DeleteAsync();
+                }
+                else
+                {
+                    judgeAccess.AccessRoles = remainingRoles;
+                    await Client.Api.UserApplicationAccess[judgeAccessId].PutAsync(judgeAccess);
+                }
+
+                successMessage = $"Judge access was removed from {GetDisplayName(user)}.";
+            }
+
+            await LoadUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to update judge access.", ex);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task DeleteUserAsync(AppUserDto user)
+    {
+        if (user.UserId is not int userId || userId == UserSession.CurrentUser?.UserId)
+        {
+            errorMessage = "You cannot delete the account currently being used.";
+            return;
+        }
+
+        var confirmed = await DialogService.Confirm(
+            $"Permanently delete {GetDisplayName(user)}? This cannot be undone.",
+            "Delete User",
+            new ConfirmOptions
+            {
+                OkButtonText = "Delete",
+                CancelButtonText = "Cancel"
+            });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        ResetMessages();
+        isBusy = true;
+
+        try
+        {
+            await Client.Api.AppUsers[userId].DeleteAsync();
+            successMessage = $"{GetDisplayName(user)} was permanently deleted.";
+            await LoadUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to delete the user.", ex);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}

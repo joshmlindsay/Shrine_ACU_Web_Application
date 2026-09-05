@@ -1,0 +1,267 @@
+@page "/manage-carshows"
+@rendermode InteractiveServer
+@inject AcuCarShowClient Client
+@inject NavigationManager Navigation
+@inject UserSessionService UserSession
+
+<PageTitle>Manage Car Shows</PageTitle>
+
+@if (!UserSession.IsAuthenticated)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in before managing car shows.</RadzenAlert>
+}
+else if (!UserSession.CanManageUsers)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">Only administrators can create car shows.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1rem">
+        <RadzenText TextStyle="TextStyle.H4">Create Car Show</RadzenText>
+        <RadzenText TextStyle="TextStyle.Caption">New events are active immediately. Select a prior show to copy its reusable configuration.</RadzenText>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+        }
+
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Event name" Variant="Variant.Outlined" Style="width:100%;">
+                            <RadzenTextBox @bind-Value="eventName" Style="width:100%;" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Copy configuration from" Variant="Variant.Outlined" Style="width:100%;">
+                            <RadzenDropDown TValue="int?" Data="@carShows" TextProperty="Name" ValueProperty="ShowId" @bind-Value="templateShowId" AllowClear="true" Placeholder="Start without a template" Style="width:100%;" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+                </RadzenRow>
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Event date" Variant="Variant.Outlined" Style="width:100%;">
+                            <RadzenDatePicker @bind-Value="eventDate" Style="width:100%;" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="End date" Variant="Variant.Outlined" Style="width:100%;">
+                            <RadzenDatePicker @bind-Value="endDate" Style="width:100%;" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+                </RadzenRow>
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="6"><RadzenFormField Text="Location" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="location" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6"><RadzenFormField Text="Category" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="category" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                </RadzenRow>
+                <RadzenFormField Text="Description" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextArea @bind-Value="description" Style="width:100%;" /></RadzenFormField>
+                <RadzenButton Text="Create Event" Icon="add" ButtonStyle="ButtonStyle.Primary" Disabled="@isBusy" Click="CreateEventAsync" />
+            </RadzenStack>
+        </RadzenCard>
+    </RadzenStack>
+}
+
+@code {
+    private List<CarShowDto> carShows = [];
+    private int? templateShowId;
+    private string? eventName;
+    private DateTime? eventDate = DateTime.Today;
+    private DateTime? endDate;
+    private string? location;
+    private string? category;
+    private string? description;
+    private string? errorMessage;
+    private bool isBusy;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !UserSession.IsInitialized || !UserSession.CanManageUsers)
+        {
+            return;
+        }
+
+        try
+        {
+            carShows = (await Client.Api.CarShows.GetAsync() ?? []).Where(show => show.ShowId.HasValue).OrderByDescending(show => show.EventDate).ToList();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load existing car shows. {ex.Message}";
+        }
+    }
+
+    private async Task CopyConfigurationAsync(int templateShowId, int newShowId)
+    {
+        var questionIds = await CopyScoringQuestionsAsync(templateShowId, newShowId);
+        await CopyClassesAsync(templateShowId, newShowId);
+        var groupIds = new Dictionary<int, int>();
+        var groups = await Client.Api.CarShowQuestionCalculationGroups.Show[templateShowId].GetAsync() ?? [];
+
+        foreach (var group in groups.Where(group => group.QuestionCalculationGroupId.HasValue))
+        {
+            var created = await Client.Api.CarShowQuestionCalculationGroups.PostAsync(new CarShowQuestionCalculationGroupDto
+            {
+                ShowId = newShowId,
+                GroupName = group.GroupName,
+                OperationType = group.OperationType,
+                SortOrder = group.SortOrder,
+                Active = group.Active,
+                CreatedByUserId = UserSession.CurrentUser?.UserId
+            });
+            if (created?.QuestionCalculationGroupId is not int newGroupId)
+            {
+                throw new InvalidOperationException("The API did not return an identifier for a copied calculation group.");
+            }
+
+            groupIds.Add(group.QuestionCalculationGroupId.Value, newGroupId);
+            var members = await Client.Api.CarShowQuestionCalculationGroupQuestions.Group[group.QuestionCalculationGroupId.Value].GetAsync() ?? [];
+            foreach (var member in members.Where(member => member.QuestionId.HasValue && questionIds.ContainsKey(member.QuestionId.Value)))
+            {
+                await Client.Api.CarShowQuestionCalculationGroupQuestions.PostAsync(new CarShowQuestionCalculationGroupQuestionDto
+                {
+                    QuestionCalculationGroupId = newGroupId,
+                    QuestionId = questionIds[member.QuestionId.Value],
+                    CalculationOrder = member.CalculationOrder,
+                    CreatedByUserId = UserSession.CurrentUser?.UserId
+                });
+            }
+        }
+
+        var calculations = await Client.Api.CarShowGroupCalculations.Show[templateShowId].GetAsync() ?? [];
+        foreach (var calculation in calculations.Where(calculation => calculation.GroupCalculationId.HasValue))
+        {
+            var created = await Client.Api.CarShowGroupCalculations.PostAsync(new CarShowGroupCalculationDto
+            {
+                ShowId = newShowId,
+                CalculationName = calculation.CalculationName,
+                OperationType = calculation.OperationType,
+                SortOrder = calculation.SortOrder,
+                Active = calculation.Active,
+                CreatedByUserId = UserSession.CurrentUser?.UserId
+            });
+            if (created?.GroupCalculationId is not int newCalculationId)
+            {
+                throw new InvalidOperationException("The API did not return an identifier for a copied group calculation.");
+            }
+
+            var members = await Client.Api.CarShowGroupCalculationMembers.Group[calculation.GroupCalculationId.Value].GetAsync() ?? [];
+            foreach (var member in members.Where(member => member.QuestionCalculationGroupId.HasValue && groupIds.ContainsKey(member.QuestionCalculationGroupId.Value)))
+            {
+                await Client.Api.CarShowGroupCalculationMembers.PostAsync(new CarShowGroupCalculationMemberDto
+                {
+                    GroupCalculationId = newCalculationId,
+                    QuestionCalculationGroupId = groupIds[member.QuestionCalculationGroupId.Value],
+                    CalculationOrder = member.CalculationOrder,
+                    CreatedByUserId = UserSession.CurrentUser?.UserId
+                });
+            }
+        }
+    }
+
+    private async Task<Dictionary<int, int>> CopyScoringQuestionsAsync(int templateShowId, int newShowId)
+    {
+        var questionIds = new Dictionary<int, int>();
+        var questions = await Client.Api.CarShowScoringQuestions.Show[templateShowId].GetAsync() ?? [];
+
+        foreach (var question in questions.Where(question => question.QuestionId.HasValue))
+        {
+            var created = await Client.Api.CarShowScoringQuestions.PostAsync(new CarShowScoringQuestionDto
+            {
+                ShowId = newShowId,
+                QuestionText = question.QuestionText,
+                Description = question.Description,
+                Category = question.Category,
+                AnswerType = question.AnswerType,
+                MinScore = question.MinScore,
+                MaxScore = question.MaxScore,
+                Required = question.Required,
+                Active = question.Active,
+                SortOrder = question.SortOrder,
+                JudgeNotes = question.JudgeNotes,
+                CreatedByUserId = UserSession.CurrentUser?.UserId
+            });
+
+            if (created?.QuestionId is not int newQuestionId)
+            {
+                throw new InvalidOperationException("The API did not return an identifier for a copied scoring question.");
+            }
+
+            questionIds.Add(question.QuestionId.Value, newQuestionId);
+        }
+
+        return questionIds;
+    }
+
+    private async Task CopyClassesAsync(int templateShowId, int newShowId)
+    {
+        var classes = await Client.Api.CarShowClasses.Show[templateShowId].GetAsync() ?? [];
+        foreach (var item in classes)
+        {
+            await Client.Api.CarShowClasses.PostAsync(new CarShowClassDto
+            {
+                ShowId = newShowId,
+                ClassName = item.ClassName,
+                Description = item.Description,
+                CustomCriteria = item.CustomCriteria,
+                DisplayOrder = item.DisplayOrder,
+                ExpectedEntries = item.ExpectedEntries,
+                MinYear = item.MinYear,
+                MaxYear = item.MaxYear,
+                OptionId = item.OptionId,
+                TypeId = item.TypeId,
+                Active = item.Active,
+                CreatedByUserId = UserSession.CurrentUser?.UserId
+            });
+        }
+    }
+
+    private async Task CreateEventAsync()
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(eventName) || !eventDate.HasValue)
+        {
+            errorMessage = "Event name and event date are required.";
+            return;
+        }
+
+        isBusy = true;
+        try
+        {
+            var show = await Client.Api.CarShows.PostAsync(new CarShowDto
+            {
+                Name = eventName.Trim(),
+                EventDate = new DateTimeOffset(eventDate.Value.Date),
+                EndDate = endDate.HasValue ? new DateTimeOffset(endDate.Value.Date) : null,
+                Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim(),
+                Category = string.IsNullOrWhiteSpace(category) ? null : category.Trim(),
+                Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
+                Active = true,
+                CreatedByUserId = UserSession.CurrentUser?.UserId
+            });
+
+            if (show?.ShowId is not int showId)
+            {
+                errorMessage = "The event was created, but the API did not return its identifier.";
+                return;
+            }
+
+            if (templateShowId.HasValue)
+            {
+                await CopyConfigurationAsync(templateShowId.Value, showId);
+            }
+
+            Navigation.NavigateTo($"/fetch-scoring?showId={showId}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to create the event. {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+}
