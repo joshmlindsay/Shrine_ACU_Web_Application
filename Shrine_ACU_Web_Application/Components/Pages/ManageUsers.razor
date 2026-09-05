@@ -126,8 +126,20 @@ else
         return string.IsNullOrWhiteSpace(name) ? user.Username ?? "Unknown user" : name;
     }
 
-    private string BuildErrorMessage(string message, Exception exception) =>
-        Environment.IsDevelopment() ? $"{message} {exception.Message}" : message;
+    private string BuildErrorMessage(string message, Exception exception)
+    {
+        if (Environment.IsDevelopment())
+        {
+            return $"{message} {exception.Message}";
+        }
+
+        if (exception is Microsoft.Kiota.Abstractions.ApiException apiException)
+        {
+            return $"{message} (HTTP {apiException.ResponseStatusCode})";
+        }
+
+        return message;
+    }
 
     private void ResetMessages()
     {
@@ -185,6 +197,13 @@ else
                     });
                 }
 
+                if (!await VerifyJudgeAccessAsync(userId))
+                {
+                    errorMessage = $"The server accepted the request, but {GetDisplayName(user)} still has no judge access. The API did not save the change.";
+                    await TryReloadUsersAsync();
+                    return;
+                }
+
                 successMessage = $"{GetDisplayName(user)} can now score entries as a judge.";
             }
             else if (judgeAccess.UserApplicationAccessId is int judgeAccessId)
@@ -204,7 +223,7 @@ else
                 successMessage = $"Judge access was removed from {GetDisplayName(user)}.";
             }
 
-            await LoadUsersAsync();
+            await TryReloadUsersAsync();
         }
         catch (Exception ex)
         {
@@ -213,6 +232,27 @@ else
         finally
         {
             isBusy = false;
+        }
+    }
+
+    // The API can acknowledge a POST/PUT without persisting the change, so confirm the
+    // judge role is actually stored before reporting success to the operator.
+    private async Task<bool> VerifyJudgeAccessAsync(int userId)
+    {
+        var savedAccesses = await Client.Api.UserApplicationAccess.User[userId].GetAsync() ?? [];
+        return savedAccesses.Any(access =>
+            access.AccessRoles.HasValue && access.AccessRoles.Value.HasFlag(UserAccessRole.Judge));
+    }
+
+    private async Task TryReloadUsersAsync()
+    {
+        try
+        {
+            await LoadUsersAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage ??= BuildErrorMessage("The change was saved, but the user list could not be refreshed.", ex);
         }
     }
 

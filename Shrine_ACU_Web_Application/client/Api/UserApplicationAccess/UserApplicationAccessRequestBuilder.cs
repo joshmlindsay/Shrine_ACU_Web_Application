@@ -117,7 +117,7 @@ namespace AcuCarShowClient.Api.UserApplicationAccess
 #endif
             var requestInfo = new RequestInformation(Method.GET, UrlTemplate, PathParameters);
             requestInfo.Configure(requestConfiguration);
-            requestInfo.Headers.TryAdd("Accept", "text/plain;q=0.9");
+            requestInfo.Headers.TryAdd("Accept", "application/json, text/plain;q=0.9");
             return requestInfo;
         }
         /// <returns>A <see cref="RequestInformation"/></returns>
