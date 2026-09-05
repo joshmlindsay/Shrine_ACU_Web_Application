@@ -73,9 +73,12 @@ public sealed class UserSessionService
                 EffectiveUser = JsonSerializer.Deserialize<AppUserDto>(effectiveUserJson);
             }
 
-            if (IsAuthenticated && CanManageUsers)
+            if (IsAuthenticated)
             {
-                await LoadAvailableUsersAsync();
+                // Roles/permissions (e.g. being granted judge access) can change server-side
+                // after this session was cached in localStorage, so refresh the current user's
+                // access from the API on every app load instead of trusting the cached snapshot.
+                await RefreshCurrentUserAsync();
             }
         }
         catch
@@ -106,9 +109,22 @@ public sealed class UserSessionService
                 return LoginResult.Fail("Invalid username or password.");
             }
 
-            if (user.UserId.HasValue && (user.ApplicationAccesses is null || user.ApplicationAccesses.Count == 0))
+            // The AppUsers/username endpoint can return a stale or partial ApplicationAccesses
+            // collection (e.g. missing the AccessRoles granted after this record was last
+            // synced), so always refresh from the authoritative UserApplicationAccess endpoint
+            // rather than only filling in when it's missing entirely. This mirrors how
+            // ManageUsers.razor loads access data and ensures role changes (like being made a
+            // judge) take effect immediately on the user's next login.
+            if (user.UserId.HasValue)
             {
-                user.ApplicationAccesses = await _client.Api.UserApplicationAccess.User[user.UserId.Value].GetAsync() ?? [];
+                try
+                {
+                    user.ApplicationAccesses = await _client.Api.UserApplicationAccess.User[user.UserId.Value].GetAsync() ?? user.ApplicationAccesses ?? [];
+                }
+                catch
+                {
+                    user.ApplicationAccesses ??= [];
+                }
             }
 
             CurrentUser = user;
@@ -149,9 +165,19 @@ public sealed class UserSessionService
                 return OperationResult.Fail("Unable to refresh user profile.");
             }
 
-            if (refreshed.UserId.HasValue && (refreshed.ApplicationAccesses is null || refreshed.ApplicationAccesses.Count == 0))
+            // Always refresh from the authoritative UserApplicationAccess endpoint rather than
+            // only when the profile response is missing accesses entirely - see LoginAsync for
+            // details on why a partial/stale collection must not be trusted as-is.
+            if (refreshed.UserId.HasValue)
             {
-                refreshed.ApplicationAccesses = await _client.Api.UserApplicationAccess.User[refreshed.UserId.Value].GetAsync() ?? [];
+                try
+                {
+                    refreshed.ApplicationAccesses = await _client.Api.UserApplicationAccess.User[refreshed.UserId.Value].GetAsync() ?? refreshed.ApplicationAccesses ?? [];
+                }
+                catch
+                {
+                    refreshed.ApplicationAccesses ??= [];
+                }
             }
 
             CurrentUser = refreshed;
