@@ -248,11 +248,13 @@ else
             Status = entry.Status
         };
 
-        await DialogService.OpenAsync<ModalCarDetail>(
+        var result = await DialogService.OpenAsync<ModalCarDetail>(
             $"{Display(detail.Year)} {Display(detail.Make)} {Display(detail.Model)}",
             new Dictionary<string, object?>
             {
-                { nameof(ModalCarDetail.CarDetail), detail }
+                { nameof(ModalCarDetail.CarDetail), detail },
+                { nameof(ModalCarDetail.EntryNumber), entry.EntryNumber },
+                { nameof(ModalCarDetail.CanEditEntryNumber), UserSession.CanWrite }
             },
             new DialogOptions
             {
@@ -262,6 +264,46 @@ else
                 Resizable = true,
                 Draggable = true
             });
+
+        if (UserSession.CanWrite && result is int updatedEntryNumber && updatedEntryNumber != entry.EntryNumber)
+        {
+            await UpdateEntryNumberAsync(entry, updatedEntryNumber);
+        }
+    }
+
+    private async Task UpdateEntryNumberAsync(CarShowEntryDto entry, int? newEntryNumber)
+    {
+        if (!entry.EntryId.HasValue)
+        {
+            errorMessage = "Unable to update entry number because entry id is missing.";
+            return;
+        }
+
+        errorMessage = null;
+        successMessage = null;
+
+        var previousEntryNumber = entry.EntryNumber;
+        entry.EntryNumber = newEntryNumber;
+
+        try
+        {
+            await Client.Api.CarShowEntries[entry.EntryId.Value].PutAsync(entry);
+            successMessage = $"Entry number updated for entry #{entry.EntryNumber ?? entry.EntryId}.";
+            results = entries.Select(item => new CarShowResult(
+                item,
+                item.CarDetail?.Owner ?? "-",
+                DisplayCarType(item.CarDetail),
+                DisplayClass(item.ClassId),
+                item.Placement ?? "-",
+                item.EntryId.HasValue && finalScoresByEntryId.TryGetValue(item.EntryId.Value, out var score) ? score.Score : null,
+                item.EntryNumber,
+                item.ClassId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            entry.EntryNumber = previousEntryNumber;
+            errorMessage = $"Unable to update entry number for entry #{previousEntryNumber ?? entry.EntryId}. {ex.Message}";
+        }
     }
 
     private async Task OpenManualPaymentDialogAsync(CarShowEntryDto entry)

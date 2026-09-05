@@ -19,11 +19,58 @@
         <RadzenColumn Size="12" SizeMD="6"><b>Transmission:</b> @ValueOrDash(CarDetail?.Transmission)</RadzenColumn>
         <RadzenColumn Size="12" SizeMD="6"><b>Fuel Type:</b> @ValueOrDash(CarDetail?.FuelType)</RadzenColumn>
     </RadzenRow>
+
+    @if (CanEditEntryNumber)
+    {
+        <RadzenRow>
+            <RadzenColumn Size="12" SizeMD="6">
+                <RadzenFormField Text="Entry Number" Variant="Variant.Outlined" Style="width:100%;">
+                    <RadzenNumeric TValue="int?" @bind-Value="editableEntryNumber" Min="1" Style="width:100%;" />
+                </RadzenFormField>
+            </RadzenColumn>
+        </RadzenRow>
+        <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+            <RadzenButton Text="Close" ButtonStyle="ButtonStyle.Light" Click="Close" />
+            <RadzenButton Text="Save Entry Number" ButtonStyle="ButtonStyle.Primary" Click="Save" />
+        </RadzenStack>
+    }
+    else
+    {
+        <RadzenRow>
+            <RadzenColumn Size="12" SizeMD="6"><b>Entry #:</b> @ValueOrDash(EntryNumber)</RadzenColumn>
+        </RadzenRow>
+    }
 </RadzenStack>
 
 @code {
+    [Inject]
+    private DialogService DialogService { get; set; } = default!;
+
     [Parameter]
     public CarDetailDto? CarDetail { get; set; }
+
+    [Parameter]
+    public int? EntryNumber { get; set; }
+
+    [Parameter]
+    public bool CanEditEntryNumber { get; set; }
+
+    private int? editableEntryNumber;
+
+    protected override void OnParametersSet()
+    {
+        editableEntryNumber = EntryNumber;
+    }
+
+    private void Save()
+    {
+        DialogService.Close(editableEntryNumber);
+    }
+
+    private void Close()
+    {
+        DialogService.Close(null);
+    }
 
     private static string ValueOrDash(string? value)
     {
