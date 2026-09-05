@@ -281,7 +281,7 @@ else
 
         try
         {
-            await Client.Api.CarShowEntries[entry.EntryId.Value].PutAsync(entry);
+            await Client.Api.CarShowEntries[entry.EntryId.Value].PutAsync(CreateEntryUpdatePayload(entry));
             successMessage = $"Entry number updated for entry #{entry.EntryNumber ?? entry.EntryId}.";
             results = RebuildResults();
         }
@@ -290,6 +290,35 @@ else
             entry.EntryNumber = previousEntryNumber;
             errorMessage = $"Unable to update entry number for entry #{previousEntryNumber ?? entry.EntryId}. {ex.Message}";
         }
+    }
+
+    private static CarShowEntryDto CreateEntryUpdatePayload(CarShowEntryDto entry)
+    {
+        return new CarShowEntryDto
+        {
+            Category = entry.Category,
+            ClassId = entry.ClassId,
+            EntryId = entry.EntryId,
+            EntryNumber = entry.EntryNumber,
+            JudgeScore = entry.JudgeScore,
+            Notes = entry.Notes,
+            PaidAmount = entry.PaidAmount,
+            PaidAtUtc = entry.PaidAtUtc,
+            PaidByUserId = entry.PaidByUserId,
+            PaymentProofReference = entry.PaymentProofReference,
+            PaymentProvider = entry.PaymentProvider,
+            PaymentProviderIntentId = entry.PaymentProviderIntentId,
+            PaymentProviderSessionId = entry.PaymentProviderSessionId,
+            PaymentStatus = entry.PaymentStatus,
+            PaymentTiming = entry.PaymentTiming,
+            Placement = entry.Placement,
+            PreferredPaymentMethod = entry.PreferredPaymentMethod,
+            RegistrationDate = entry.RegistrationDate,
+            ShowId = entry.ShowId,
+            Status = entry.Status,
+            SubmittedByUserId = entry.SubmittedByUserId,
+            Vin = entry.Vin
+        };
     }
 
     private List<CarShowResult> RebuildResults()
