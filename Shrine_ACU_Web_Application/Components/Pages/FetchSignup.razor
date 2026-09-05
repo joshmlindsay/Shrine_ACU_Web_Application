@@ -139,9 +139,10 @@ else
 
                         <RadzenRow Gap="1rem">
                             <RadzenColumn Size="12" SizeMD="6">
-                                <RadzenFormField Text="VIN (optional)" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenFormField Text="VIN" Variant="Variant.Outlined" Style="width:100%;">
                                     <RadzenTextBox Name="Vin" @bind-Value="form.Vin" Style="width:100%;" />
                                 </RadzenFormField>
+                                <RadzenRequiredValidator Component="Vin" Text="VIN is required" Popup="true" />
                             </RadzenColumn>
                             <RadzenColumn Size="12" SizeMD="6">
                                 <RadzenFormField Text="Color" Variant="Variant.Outlined" Style="width:100%;">
@@ -274,12 +275,36 @@ else
     {
         errorMessage = null;
         successMessage = null;
-        form.Email = string.IsNullOrWhiteSpace(form.Email) ? null : form.Email.Trim();
-        form.Vin = string.IsNullOrWhiteSpace(form.Vin) ? null : form.Vin.Trim();
+        form.FirstName = NullIfWhiteSpace(form.FirstName);
+        form.LastName = NullIfWhiteSpace(form.LastName);
+        form.Email = NullIfWhiteSpace(form.Email);
+        form.Phone = NullIfWhiteSpace(form.Phone);
+        form.Make = NullIfWhiteSpace(form.Make);
+        form.Model = NullIfWhiteSpace(form.Model);
+        form.Vin = NullIfWhiteSpace(form.Vin);
+        form.Color = NullIfWhiteSpace(form.Color);
 
-        if (eventClasses.Count > 0 && !form.ClassId.HasValue)
+        if (!form.ShowId.HasValue)
+        {
+            errorMessage = "Select a car show before registering.";
+            return;
+        }
+
+        if (!form.ClassId.HasValue)
         {
             errorMessage = "Class is required for this event.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(form.Vin))
+        {
+            errorMessage = "VIN is required to register a car.";
+            return;
+        }
+
+        if (UserSession.EffectiveUserId is not int effectiveUserId)
+        {
+            errorMessage = "Your session is missing a user identifier. Please sign out and sign in again.";
             return;
         }
 
@@ -289,6 +314,7 @@ else
 
         try
         {
+            var existingCarDetail = await FindExistingCarDetailAsync(form.Vin);
             var entry = new CarShowEntryDto
             {
                 ShowId = form.ShowId,
@@ -297,9 +323,9 @@ else
                 EntryNumber = form.EntryNumber,
                 Status = "Pending",
                 RegistrationDate = DateTimeOffset.UtcNow,
-                SubmittedByUserId = UserSession.EffectiveUserId,
+                SubmittedByUserId = effectiveUserId,
                 PaymentStatus = "Pending",
-                CarDetail = new CarDetailDto
+                CarDetail = existingCarDetail is null ? new CarDetailDto
                 {
                     Vin = form.Vin,
                     Year = form.Year,
@@ -308,7 +334,7 @@ else
                     Color = form.Color,
                     Owner = $"{form.FirstName} {form.LastName}".Trim(),
                     Status = "Pending"
-                },
+                } : null,
                 Notes = BuildContactNotes()
             };
 
@@ -330,6 +356,21 @@ else
 
         Navigation.NavigateTo($"/payment/{entryId}", replace: true);
     }
+
+    private async Task<CarDetailDto?> FindExistingCarDetailAsync(string vin)
+    {
+        try
+        {
+            return await Client.Api.CarDetails[vin].GetAsync();
+        }
+        catch (Microsoft.Kiota.Abstractions.ApiException ex) when (ex.ResponseStatusCode == 404)
+        {
+            return null;
+        }
+    }
+
+    private static string? NullIfWhiteSpace(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private void PrefillFromEffectiveUser()
     {
