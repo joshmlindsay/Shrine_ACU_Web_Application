@@ -108,6 +108,14 @@ else
 
                         <RadzenRow Gap="1rem">
                             <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Entry Number (optional)" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenNumeric Name="EntryNumber" TValue="int?" @bind-Value="form.EntryNumber" Style="width:100%;" Min="1" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                        </RadzenRow>
+
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="4">
                                 <RadzenFormField Text="Year" Variant="Variant.Outlined" Style="width:100%;">
                                     <RadzenNumeric Name="Year" TValue="int?" @bind-Value="form.Year" Style="width:100%;" Min="1900" Max="2100" />
                                 </RadzenFormField>
@@ -283,6 +291,7 @@ else
                 ShowId = form.ShowId,
                 Vin = form.Vin,
                 ClassId = form.ClassId,
+                EntryNumber = form.EntryNumber,
                 Status = "Pending",
                 RegistrationDate = DateTimeOffset.UtcNow,
                 SubmittedByUserId = UserSession.EffectiveUserId,
@@ -342,6 +351,7 @@ else
     {
         public int? ShowId { get; set; }
         public int? ClassId { get; set; }
+        public int? EntryNumber { get; set; }
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
         public string? Email { get; set; }
