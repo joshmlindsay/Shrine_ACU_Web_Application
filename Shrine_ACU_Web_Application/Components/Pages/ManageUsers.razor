@@ -216,6 +216,9 @@ else
         }
     }
 
+    // This application currently manages access for a single Application record, so any known
+    // ApplicationId (from an existing access) or the sole/active Application returned by the API
+    // is a safe choice when creating a brand-new access record.
     private async Task<int?> ResolveApplicationIdAsync()
     {
         var knownApplicationId = users
@@ -234,8 +237,9 @@ else
             return applications.FirstOrDefault(application => application.Active != false)?.ApplicationId
                 ?? applications.FirstOrDefault()?.ApplicationId;
         }
-        catch
+        catch (Exception ex)
         {
+            errorMessage = BuildErrorMessage("Unable to determine the application to grant judge access for.", ex);
             return null;
         }
     }
