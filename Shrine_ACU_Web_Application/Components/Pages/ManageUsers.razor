@@ -135,7 +135,7 @@ else
 
         if (exception is Microsoft.Kiota.Abstractions.ApiException apiException)
         {
-            return $"{message} (server error {apiException.ResponseStatusCode})";
+            return $"{message} (HTTP {apiException.ResponseStatusCode})";
         }
 
         return message;
