@@ -2,7 +2,6 @@
 @rendermode InteractiveServer
 @inject AcuCarShowClient Client
 @inject DialogService DialogService
-@inject NavigationManager Navigation
 @inject UserSessionService UserSession
 
 <PageTitle>Car Shows</PageTitle>
@@ -34,8 +33,8 @@ else
                                     Data="@carShows"
                                     TextProperty="Name"
                                     ValueProperty="ShowId"
-                                    @bind-Value="selectedShowId"
-                                    Change="@OnShowSelectionChanged"
+                                    Value="@selectedShowId"
+                                    ValueChanged="@OnShowSelectionChanged"
                                     AllowClear="true"
                                     Placeholder="Choose a show"
                                     Style="width:100%;" />
@@ -119,17 +118,10 @@ else
     private string? errorMessage;
     private string? successMessage;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!UserSession.IsAuthenticated)
+        if (!firstRender || !UserSession.IsInitialized || !UserSession.IsAuthenticated || !UserSession.CanRead)
         {
-            Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString("/fetch-carshows")}");
-            return;
-        }
-
-        if (!UserSession.CanRead)
-        {
-            Navigation.NavigateTo("/", replace: true);
             return;
         }
 
@@ -142,10 +134,14 @@ else
         {
             errorMessage = $"Unable to load car shows. {ex.Message}";
         }
+
+        await InvokeAsync(StateHasChanged);
     }
 
-    private async Task OnShowSelectionChanged(object? _)
+    private async Task OnShowSelectionChanged(int? showId)
     {
+        selectedShowId = showId;
+
         if (!selectedShowId.HasValue)
         {
             selectedShow = null;

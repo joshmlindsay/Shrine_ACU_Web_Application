@@ -58,7 +58,7 @@
 
         hasInitialized = true;
 
-        if (!UserSession.IsAuthenticated && !IsPublicRoute(Navigation.Uri))
+        if (UserSession.IsInitialized && !UserSession.IsAuthenticated && !IsPublicRoute(Navigation.Uri))
         {
             Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri))}", replace: true);
             return;
@@ -69,7 +69,7 @@
 
     protected override void OnParametersSet()
     {
-        if (hasInitialized && !UserSession.IsAuthenticated && !IsPublicRoute(Navigation.Uri))
+        if (UserSession.IsInitialized && !UserSession.IsAuthenticated && !IsPublicRoute(Navigation.Uri))
         {
             Navigation.NavigateTo($"/fetch-login?returnUrl={Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri))}", replace: true);
         }

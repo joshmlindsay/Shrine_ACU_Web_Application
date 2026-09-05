@@ -25,6 +25,7 @@ public sealed class UserSessionService
     public AppUserDto? EffectiveUser { get; private set; }
 
     public IReadOnlyList<AppUserDto> AvailableUsers => _availableUsers;
+    public bool IsInitialized { get; private set; }
     public bool IsAuthenticated => CurrentUser is not null;
     public IReadOnlyList<UserApplicationAccessDto> Accesses => CurrentUser?.ApplicationAccesses ?? [];
 
@@ -51,7 +52,12 @@ public sealed class UserSessionService
     public async Task InitializeAsync(IJSRuntime jsRuntime)
     {
         _jsRuntime = jsRuntime;
-        if (jsRuntime is null) return;
+        if (jsRuntime is null)
+        {
+            IsInitialized = true;
+            NotifyStateChanged();
+            return;
+        }
 
         try
         {
@@ -71,11 +77,14 @@ public sealed class UserSessionService
             {
                 await LoadAvailableUsersAsync();
             }
-
-            NotifyStateChanged();
         }
         catch
         {
+        }
+        finally
+        {
+            IsInitialized = true;
+            NotifyStateChanged();
         }
     }
 
