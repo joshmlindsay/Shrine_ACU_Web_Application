@@ -165,9 +165,18 @@ else
                 }
                 else
                 {
+                    var applicationId = await ResolveApplicationIdAsync();
+
+                    if (applicationId is null)
+                    {
+                        errorMessage = "Unable to determine the application to grant judge access for.";
+                        return;
+                    }
+
                     await Client.Api.UserApplicationAccess.PostAsync(new UserApplicationAccessDto
                     {
                         UserId = userId,
+                        ApplicationId = applicationId,
                         AccessRoles = UserAccessRole.Judge,
                         CanRead = true,
                         CanWrite = true,
@@ -204,6 +213,34 @@ else
         finally
         {
             isBusy = false;
+        }
+    }
+
+    // This application currently manages access for a single Application record, so any known
+    // ApplicationId (from an existing access) or the sole/active Application returned by the API
+    // is a safe choice when creating a brand-new access record.
+    private async Task<int?> ResolveApplicationIdAsync()
+    {
+        var knownApplicationId = users
+            .SelectMany(user => user.ApplicationAccesses ?? [])
+            .Select(access => access.ApplicationId)
+            .FirstOrDefault(applicationId => applicationId.HasValue);
+
+        if (knownApplicationId.HasValue)
+        {
+            return knownApplicationId;
+        }
+
+        try
+        {
+            var applications = await Client.Api.Applications.GetAsync() ?? [];
+            return applications.FirstOrDefault(application => application.Active != false)?.ApplicationId
+                ?? applications.FirstOrDefault()?.ApplicationId;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to determine the application to grant judge access for.", ex);
+            return null;
         }
     }
 
