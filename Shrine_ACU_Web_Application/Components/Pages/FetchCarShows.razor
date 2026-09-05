@@ -182,15 +182,7 @@ else
                 .Where(item => item.EntryId.HasValue)
                 .GroupBy(item => item.EntryId!.Value)
                 .ToDictionary(group => group.Key, group => group.OrderByDescending(item => item.CalculatedDate).First());
-            results = entries.Select(entry => new CarShowResult(
-                entry,
-                entry.CarDetail?.Owner ?? "-",
-                DisplayCarType(entry.CarDetail),
-                DisplayClass(entry.ClassId),
-                entry.Placement ?? "-",
-                entry.EntryId.HasValue && finalScoresByEntryId.TryGetValue(entry.EntryId.Value, out var score) ? score.Score : null,
-                entry.EntryNumber,
-                entry.ClassId)).ToList();
+            results = RebuildResults();
             selectedClassId = null;
         }
         catch (Exception ex)
@@ -265,9 +257,11 @@ else
                 Draggable = true
             });
 
-        if (UserSession.CanWrite && result is int updatedEntryNumber && updatedEntryNumber != entry.EntryNumber)
+        if (UserSession.CanWrite
+            && result is ModalCarDetail.EntryNumberUpdateResult update
+            && update.EntryNumber != entry.EntryNumber)
         {
-            await UpdateEntryNumberAsync(entry, updatedEntryNumber);
+            await UpdateEntryNumberAsync(entry, update.EntryNumber);
         }
     }
 
@@ -289,21 +283,26 @@ else
         {
             await Client.Api.CarShowEntries[entry.EntryId.Value].PutAsync(entry);
             successMessage = $"Entry number updated for entry #{entry.EntryNumber ?? entry.EntryId}.";
-            results = entries.Select(item => new CarShowResult(
-                item,
-                item.CarDetail?.Owner ?? "-",
-                DisplayCarType(item.CarDetail),
-                DisplayClass(item.ClassId),
-                item.Placement ?? "-",
-                item.EntryId.HasValue && finalScoresByEntryId.TryGetValue(item.EntryId.Value, out var score) ? score.Score : null,
-                item.EntryNumber,
-                item.ClassId)).ToList();
+            results = RebuildResults();
         }
         catch (Exception ex)
         {
             entry.EntryNumber = previousEntryNumber;
             errorMessage = $"Unable to update entry number for entry #{previousEntryNumber ?? entry.EntryId}. {ex.Message}";
         }
+    }
+
+    private List<CarShowResult> RebuildResults()
+    {
+        return entries.Select(entry => new CarShowResult(
+            entry,
+            entry.CarDetail?.Owner ?? "-",
+            DisplayCarType(entry.CarDetail),
+            DisplayClass(entry.ClassId),
+            entry.Placement ?? "-",
+            entry.EntryId.HasValue && finalScoresByEntryId.TryGetValue(entry.EntryId.Value, out var score) ? score.Score : null,
+            entry.EntryNumber,
+            entry.ClassId)).ToList();
     }
 
     private async Task OpenManualPaymentDialogAsync(CarShowEntryDto entry)

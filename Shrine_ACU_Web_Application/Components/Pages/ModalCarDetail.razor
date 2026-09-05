@@ -64,7 +64,7 @@
 
     private void Save()
     {
-        DialogService.Close(editableEntryNumber);
+        DialogService.Close(new EntryNumberUpdateResult(editableEntryNumber));
     }
 
     private void Close()
@@ -81,4 +81,6 @@
     {
         return value?.ToString() ?? "-";
     }
+
+    public sealed record EntryNumberUpdateResult(int? EntryNumber);
 }
