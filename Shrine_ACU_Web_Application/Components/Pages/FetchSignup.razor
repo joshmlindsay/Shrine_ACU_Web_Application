@@ -91,11 +91,13 @@ else
 
                         <RadzenRow Gap="1rem">
                             <RadzenColumn Size="12" SizeMD="6">
-                                <RadzenFormField Text="Email" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenFormField Text="Email (optional)" Variant="Variant.Outlined" Style="width:100%;">
                                     <RadzenTextBox Name="Email" @bind-Value="form.Email" Style="width:100%;" />
                                 </RadzenFormField>
-                                <RadzenRequiredValidator Component="Email" Text="Email is required" Popup="true" />
-                                <RadzenEmailValidator Component="Email" Text="Enter a valid email" Popup="true" />
+                                @if (!string.IsNullOrWhiteSpace(form.Email))
+                                {
+                                    <RadzenEmailValidator Component="Email" Text="Enter a valid email" Popup="true" />
+                                }
                             </RadzenColumn>
                             <RadzenColumn Size="12" SizeMD="6">
                                 <RadzenFormField Text="Phone" Variant="Variant.Outlined" Style="width:100%;">
@@ -137,10 +139,9 @@ else
 
                         <RadzenRow Gap="1rem">
                             <RadzenColumn Size="12" SizeMD="6">
-                                <RadzenFormField Text="VIN" Variant="Variant.Outlined" Style="width:100%;">
+                                <RadzenFormField Text="VIN (optional)" Variant="Variant.Outlined" Style="width:100%;">
                                     <RadzenTextBox Name="Vin" @bind-Value="form.Vin" Style="width:100%;" />
                                 </RadzenFormField>
-                                <RadzenRequiredValidator Component="Vin" Text="VIN is required" Popup="true" />
                             </RadzenColumn>
                             <RadzenColumn Size="12" SizeMD="6">
                                 <RadzenFormField Text="Color" Variant="Variant.Outlined" Style="width:100%;">
@@ -273,6 +274,8 @@ else
     {
         errorMessage = null;
         successMessage = null;
+        form.Email = string.IsNullOrWhiteSpace(form.Email) ? null : form.Email.Trim();
+        form.Vin = string.IsNullOrWhiteSpace(form.Vin) ? null : form.Vin.Trim();
 
         if (eventClasses.Count > 0 && !form.ClassId.HasValue)
         {
