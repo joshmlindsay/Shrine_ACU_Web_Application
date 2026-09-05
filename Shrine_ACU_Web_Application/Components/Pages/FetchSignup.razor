@@ -51,13 +51,26 @@ else
                                                     Data="@carShows"
                                                     TextProperty="Name"
                                                     ValueProperty="ShowId"
-                                                    @bind-Value="form.ShowId"
+                                                     Value="@form.ShowId"
+                                                     ValueChanged="OnShowSelectionChanged"
                                                     Placeholder="Select a car show"
                                                     Style="width:100%;" />
                                 </RadzenFormField>
                                 <RadzenRequiredValidator Component="ShowId" Text="Car show is required" Popup="true" />
                             </RadzenColumn>
                         </RadzenRow>
+
+                        @if (eventClasses.Count > 0)
+                        {
+                            <RadzenRow>
+                                <RadzenColumn Size="12" SizeMD="6">
+                                    <RadzenFormField Text="Class" Variant="Variant.Outlined" Style="width:100%;">
+                                        <RadzenDropDown Name="ClassId" TValue="int?" Data="@eventClasses" TextProperty="ClassName" ValueProperty="ClassId" @bind-Value="form.ClassId" Placeholder="Select a class" Style="width:100%;" />
+                                    </RadzenFormField>
+                                    <RadzenRequiredValidator Component="ClassId" Text="Class is required" Popup="true" />
+                                </RadzenColumn>
+                            </RadzenRow>
+                        }
 
                         <RadzenText TextStyle="TextStyle.H5">Personal Information</RadzenText>
 
@@ -148,6 +161,7 @@ else
     public int? CarShowIdQuery { get; set; }
 
     private List<CarShowDto> carShows = [];
+    private List<CarShowClassDto> eventClasses = [];
     private SignupFormModel form = new();
     private bool isLoading = true;
     private bool isSubmitting;
@@ -170,10 +184,10 @@ else
 
         PrefillFromEffectiveUser();
         await LoadShowsAsync();
-        ApplyPrefilledShowId();
+        await ApplyPrefilledShowIdAsync();
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         if (!UserSession.IsAuthenticated || !UserSession.CanWrite)
         {
@@ -181,7 +195,7 @@ else
         }
 
         PrefillFromEffectiveUser();
-        ApplyPrefilledShowId();
+        await ApplyPrefilledShowIdAsync();
     }
 
     private async Task LoadShowsAsync()
@@ -201,7 +215,7 @@ else
         }
     }
 
-    private void ApplyPrefilledShowId()
+    private async Task ApplyPrefilledShowIdAsync()
     {
         var preferredShowId = ShowId ?? CarShowIdQuery;
 
@@ -213,7 +227,37 @@ else
         var exists = carShows.Any(x => x.ShowId == preferredShowId.Value);
         if (exists)
         {
-            form.ShowId = preferredShowId.Value;
+            await SetSelectedShowAsync(preferredShowId.Value);
+        }
+    }
+
+    private async Task OnShowSelectionChanged(int? showId)
+    {
+        await SetSelectedShowAsync(showId);
+    }
+
+    private async Task SetSelectedShowAsync(int? showId)
+    {
+        form.ShowId = showId;
+        form.ClassId = null;
+        eventClasses = [];
+
+        if (!showId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            eventClasses = (await Client.Api.CarShowClasses.Show[showId.Value].GetAsync() ?? [])
+                .Where(item => item.ClassId.HasValue && item.Active == true)
+                .OrderBy(item => item.DisplayOrder)
+                .ThenBy(item => item.ClassName)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load event classes. {ex.Message}";
         }
     }
 
@@ -222,19 +266,23 @@ else
         errorMessage = null;
         successMessage = null;
 
+        if (eventClasses.Count > 0 && !form.ClassId.HasValue)
+        {
+            errorMessage = "Class is required for this event.";
+            return;
+        }
+
         isSubmitting = true;
 
         CarShowEntryDto? createdEntry = null;
 
         try
         {
-            var selectedShow = carShows.FirstOrDefault(x => x.ShowId == form.ShowId);
-
             var entry = new CarShowEntryDto
             {
                 ShowId = form.ShowId,
                 Vin = form.Vin,
-                Category = selectedShow?.Category,
+                ClassId = form.ClassId,
                 Status = "Pending",
                 RegistrationDate = DateTimeOffset.UtcNow,
                 SubmittedByUserId = UserSession.EffectiveUserId,
@@ -293,6 +341,7 @@ else
     private sealed class SignupFormModel
     {
         public int? ShowId { get; set; }
+        public int? ClassId { get; set; }
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
         public string? Email { get; set; }

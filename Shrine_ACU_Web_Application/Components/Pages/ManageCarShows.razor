@@ -17,7 +17,7 @@ else if (!UserSession.CanManageUsers)
 else
 {
     <RadzenStack Gap="1rem">
-        <RadzenText TextStyle="TextStyle.H4">Create Car Show</RadzenText>
+        <RadzenText TextStyle="TextStyle.H4">Manage Car Shows</RadzenText>
         <RadzenText TextStyle="TextStyle.Caption">New events are active immediately. Select a prior show to copy its reusable configuration.</RadzenText>
 
         @if (!string.IsNullOrWhiteSpace(errorMessage))
@@ -51,12 +51,59 @@ else
                         </RadzenFormField>
                     </RadzenColumn>
                 </RadzenRow>
-                <RadzenRow Gap="1rem">
-                    <RadzenColumn Size="12" SizeMD="6"><RadzenFormField Text="Location" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="location" Style="width:100%;" /></RadzenFormField></RadzenColumn>
-                    <RadzenColumn Size="12" SizeMD="6"><RadzenFormField Text="Category" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="category" Style="width:100%;" /></RadzenFormField></RadzenColumn>
-                </RadzenRow>
+                <RadzenFormField Text="Location" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="location" Style="width:100%;" /></RadzenFormField>
                 <RadzenFormField Text="Description" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextArea @bind-Value="description" Style="width:100%;" /></RadzenFormField>
                 <RadzenButton Text="Create Event" Icon="add" ButtonStyle="ButtonStyle.Primary" Disabled="@isBusy" Click="CreateEventAsync" />
+            </RadzenStack>
+        </RadzenCard>
+
+        <RadzenCard>
+            <RadzenStack Gap="1rem">
+                <RadzenText TextStyle="TextStyle.H5">Edit Existing Event</RadzenText>
+                <RadzenFormField Text="Event to edit" Variant="Variant.Outlined" Style="width:100%;">
+                    <RadzenDropDown TValue="int?" Data="@carShows" TextProperty="Name" ValueProperty="ShowId" Value="@editShowId" ValueChanged="SelectEventAsync" AllowClear="true" Placeholder="Select an event" Style="width:100%;" />
+                </RadzenFormField>
+
+                @if (editShowId.HasValue)
+                {
+                    <RadzenRow Gap="1rem">
+                        <RadzenColumn Size="12" SizeMD="6"><RadzenFormField Text="Event name" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="editEventName" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="6"><RadzenFormField Text="Location" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="editLocation" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                    </RadzenRow>
+                    <RadzenRow Gap="1rem">
+                        <RadzenColumn Size="12" SizeMD="6"><RadzenFormField Text="Event date" Variant="Variant.Outlined" Style="width:100%;"><RadzenDatePicker @bind-Value="editEventDate" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="6"><RadzenFormField Text="End date" Variant="Variant.Outlined" Style="width:100%;"><RadzenDatePicker @bind-Value="editEndDate" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                    </RadzenRow>
+                    <RadzenFormField Text="Description" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextArea @bind-Value="editDescription" Style="width:100%;" /></RadzenFormField>
+                    <RadzenButton Text="Update Event" Icon="save" ButtonStyle="ButtonStyle.Primary" Disabled="@isBusy" Click="UpdateEventAsync" />
+
+                    <RadzenText TextStyle="TextStyle.H6">Event Classes</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption">Classes such as Hot Rods, Classics, and Jeeps are available to registrants for this event.</RadzenText>
+                    <RadzenRow Gap="1rem" AlignItems="AlignItems.End">
+                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Class name" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="newClassName" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="5"><RadzenFormField Text="Description" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="newClassDescription" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                        <RadzenColumn Size="12" SizeMD="3"><RadzenButton Text="Add Class" Icon="add" ButtonStyle="ButtonStyle.Primary" Disabled="@isBusy" Click="CreateClassAsync" /></RadzenColumn>
+                    </RadzenRow>
+                    <RadzenDataGrid Data="@eventClasses" TItem="CarShowClassDto" EmptyText="No classes have been added for this event.">
+                        <Columns>
+                            <RadzenDataGridColumn TItem="CarShowClassDto" Title="Class Name">
+                                <Template Context="item"><RadzenTextBox @bind-Value="item.ClassName" Style="width:100%;" /></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="CarShowClassDto" Title="Description">
+                                <Template Context="item"><RadzenTextBox @bind-Value="item.Description" Style="width:100%;" /></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="CarShowClassDto" Title="Order" Width="110px">
+                                <Template Context="item"><RadzenNumeric TValue="int?" @bind-Value="item.DisplayOrder" Style="width:100%;" /></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="CarShowClassDto" Title="Active" Width="100px">
+                                <Template Context="item"><RadzenCheckBox TValue="bool?" @bind-Value="item.Active" /></Template>
+                            </RadzenDataGridColumn>
+                            <RadzenDataGridColumn TItem="CarShowClassDto" Title="Actions" Width="100px" Sortable="false" Filterable="false">
+                                <Template Context="item"><RadzenButton Text="Save" Size="ButtonSize.Small" Disabled="@isBusy" Click="@(async _ => await UpdateClassAsync(item))" /></Template>
+                            </RadzenDataGridColumn>
+                        </Columns>
+                    </RadzenDataGrid>
+                }
             </RadzenStack>
         </RadzenCard>
     </RadzenStack>
@@ -69,8 +116,16 @@ else
     private DateTime? eventDate = DateTime.Today;
     private DateTime? endDate;
     private string? location;
-    private string? category;
     private string? description;
+    private int? editShowId;
+    private string? editEventName;
+    private DateTime? editEventDate;
+    private DateTime? editEndDate;
+    private string? editLocation;
+    private string? editDescription;
+    private List<CarShowClassDto> eventClasses = [];
+    private string? newClassName;
+    private string? newClassDescription;
     private string? errorMessage;
     private bool isBusy;
 
@@ -89,6 +144,139 @@ else
         catch (Exception ex)
         {
             errorMessage = $"Unable to load existing car shows. {ex.Message}";
+        }
+    }
+
+    private async Task SelectEventAsync(int? showId)
+    {
+        editShowId = showId;
+        var show = carShows.FirstOrDefault(item => item.ShowId == showId);
+        editEventName = show?.Name;
+        editEventDate = show?.EventDate?.DateTime;
+        editEndDate = show?.EndDate?.DateTime;
+        editLocation = show?.Location;
+        editDescription = show?.Description;
+
+        eventClasses = [];
+        if (!showId.HasValue)
+        {
+            return;
+        }
+
+        await LoadEventClassesAsync(showId.Value);
+    }
+
+    private async Task CreateClassAsync()
+    {
+        errorMessage = null;
+        if (!editShowId.HasValue || string.IsNullOrWhiteSpace(newClassName))
+        {
+            errorMessage = "Class name is required.";
+            return;
+        }
+
+        isBusy = true;
+        try
+        {
+            await Client.Api.CarShowClasses.PostAsync(new CarShowClassDto
+            {
+                ShowId = editShowId.Value,
+                ClassName = newClassName.Trim(),
+                Description = string.IsNullOrWhiteSpace(newClassDescription) ? null : newClassDescription.Trim(),
+                DisplayOrder = eventClasses.Count == 0 ? 1 : eventClasses.Max(item => item.DisplayOrder ?? 0) + 1,
+                Active = true,
+                CreatedByUserId = UserSession.CurrentUser?.UserId
+            });
+            newClassName = null;
+            newClassDescription = null;
+            await LoadEventClassesAsync(editShowId.Value);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to add the class. {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task UpdateClassAsync(CarShowClassDto item)
+    {
+        if (item.ClassId is not int classId || string.IsNullOrWhiteSpace(item.ClassName))
+        {
+            errorMessage = "Class name is required.";
+            return;
+        }
+
+        isBusy = true;
+        try
+        {
+            item.ClassName = item.ClassName.Trim();
+            item.Description = string.IsNullOrWhiteSpace(item.Description) ? null : item.Description.Trim();
+            await Client.Api.CarShowClasses[classId].PutAsync(item);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to update the class. {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task LoadEventClassesAsync(int showId)
+    {
+        try
+        {
+            eventClasses = (await Client.Api.CarShowClasses.Show[showId].GetAsync() ?? [])
+                .Where(item => item.ClassId.HasValue)
+                .OrderBy(item => item.DisplayOrder)
+                .ThenBy(item => item.ClassName)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load event classes. {ex.Message}";
+        }
+    }
+
+    private async Task UpdateEventAsync()
+    {
+        errorMessage = null;
+
+        if (!editShowId.HasValue || string.IsNullOrWhiteSpace(editEventName) || !editEventDate.HasValue)
+        {
+            errorMessage = "Event name and event date are required.";
+            return;
+        }
+
+        var show = carShows.FirstOrDefault(item => item.ShowId == editShowId.Value);
+        if (show is null)
+        {
+            errorMessage = "The selected event could not be found.";
+            return;
+        }
+
+        isBusy = true;
+        try
+        {
+            show.Name = editEventName.Trim();
+            show.EventDate = new DateTimeOffset(editEventDate.Value.Date);
+            show.EndDate = editEndDate.HasValue ? new DateTimeOffset(editEndDate.Value.Date) : null;
+            show.Location = string.IsNullOrWhiteSpace(editLocation) ? null : editLocation.Trim();
+            show.Description = string.IsNullOrWhiteSpace(editDescription) ? null : editDescription.Trim();
+
+            await Client.Api.CarShows[editShowId.Value].PutAsync(show);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to update the event. {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
         }
     }
 
@@ -236,7 +424,6 @@ else
                 EventDate = new DateTimeOffset(eventDate.Value.Date),
                 EndDate = endDate.HasValue ? new DateTimeOffset(endDate.Value.Date) : null,
                 Location = string.IsNullOrWhiteSpace(location) ? null : location.Trim(),
-                Category = string.IsNullOrWhiteSpace(category) ? null : category.Trim(),
                 Description = string.IsNullOrWhiteSpace(description) ? null : description.Trim(),
                 Active = true,
                 CreatedByUserId = UserSession.CurrentUser?.UserId
