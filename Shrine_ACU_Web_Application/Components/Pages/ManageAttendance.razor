@@ -395,7 +395,7 @@ else
         await RunBusyAsync(async () =>
         {
             newEvent.EventDates = BuildEventDateDtosForSave(newEventDates, null).ToArray();
-            newEvent.EventDate = newEvent.EventDates.FirstOrDefault()?.EventDate;
+            newEvent.EventDate = newEvent.EventDates.FirstOrDefault()?.EventDate.ToDateTime(TimeOnly.MinValue);
             ValidateEvent(newEvent);
             var created = await EventsApi.CreateAsync(newEvent);
             successMessage = $"Attendance event '{created?.Name ?? newEvent.Name}' created.";
@@ -414,7 +414,7 @@ else
         await RunBusyAsync(async () =>
         {
             selectedEvent.EventDates = BuildEventDateDtosForSave(selectedEventDates, eventId).ToArray();
-            selectedEvent.EventDate = selectedEvent.EventDates.FirstOrDefault()?.EventDate;
+            selectedEvent.EventDate = selectedEvent.EventDates.FirstOrDefault()?.EventDate.ToDateTime(TimeOnly.MinValue);
             ValidateEvent(selectedEvent);
             await EventsApi.UpdateAsync(eventId, selectedEvent);
             successMessage = "Attendance event updated.";
@@ -858,14 +858,14 @@ else
             .Select(date => new AttendanceEventDateDto
             {
                 EventId = eventId,
-                EventDate = date
+                EventDate = DateOnly.FromDateTime(date)
             })
             .ToArray();
     }
 
     private static IEnumerable<DateTime> BuildEventDatesForEdit(DateTime? eventDate, IEnumerable<AttendanceEventDateDto>? selectedDates)
     {
-        var dates = NormalizeDates(selectedDates?.Select(x => x.EventDate)).ToList();
+        var dates = NormalizeDates(selectedDates?.Select(x => x.EventDate.ToDateTime(TimeOnly.MinValue))).ToList();
 
         if (dates.Count == 0 && eventDate.HasValue)
         {

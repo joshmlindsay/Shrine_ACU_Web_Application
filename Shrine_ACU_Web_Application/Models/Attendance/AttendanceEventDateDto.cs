@@ -4,5 +4,5 @@ public sealed class AttendanceEventDateDto
 {
     public int? AttendanceEventDateId { get; set; }
     public int? EventId { get; set; }
-    public DateTime EventDate { get; set; }
+    public DateOnly EventDate { get; set; }
 }

@@ -401,7 +401,7 @@
             return true;
         }
 
-        return attendanceEvent.EventDates.Any(x => x.EventDate.Date == DateTime.Today);
+        return attendanceEvent.EventDates.Any(x => x.EventDate == DateOnly.FromDateTime(DateTime.Today));
     }
 
     private static string DisplayValue(string? value) => string.IsNullOrWhiteSpace(value) ? "Not provided" : value;
