@@ -23,20 +23,15 @@
     </RadzenRow>
 
     <RadzenFormField Text="School Name" Variant="Variant.Outlined" Style="width:100%;">
-        <RadzenTextBox @bind-Value="model.SchoolName" @oninput="OnSchoolInput" Style="width:100%;" Placeholder="Type or pick existing school" />
+        <RadzenTextBox @bind-Value="model.SchoolName" @oninput="OnSchoolInput" list="school-suggestions" Style="width:100%;" Placeholder="Type or pick existing school" />
     </RadzenFormField>
 
-    @if (schoolSuggestions.Count > 0)
-    {
-        <RadzenDropDown TValue="string"
-                        Data="@schoolSuggestions"
-                        Value="@model.SchoolName"
-                        ValueChanged="@(value => model.SchoolName = value)"
-                        AllowFiltering="true"
-                        AllowClear="true"
-                        Placeholder="Select existing school"
-                        Style="width:100%;" />
-    }
+    <datalist id="school-suggestions">
+        @foreach (var school in schoolSuggestions)
+        {
+            <option value="@school"></option>
+        }
+    </datalist>
 
     <RadzenFormField Text="Attendee Type" Variant="Variant.Outlined" Style="width:100%;">
         <RadzenDropDown TValue="AttendeeType"
