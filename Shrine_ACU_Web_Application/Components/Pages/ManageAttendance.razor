@@ -43,6 +43,14 @@ else
             <RadzenAlert AlertStyle="AlertStyle.Success">@successMessage</RadzenAlert>
         }
 
+        @if (isLoadingAttendanceData)
+        {
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+                <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+                <RadzenText TextStyle="TextStyle.Body2">Loading attendance data...</RadzenText>
+            </RadzenStack>
+        }
+
         <RadzenTabs>
             <Tabs>
                 <RadzenTabsItem Text="Events">
@@ -165,8 +173,8 @@ else
                                         RowSelect="OnEventRowSelected">
                             <Columns>
                                 <RadzenDataGridColumn TItem="AttendanceEventDto" Property="Name" Title="Event" />
-                                <RadzenDataGridColumn TItem="AttendanceEventDto" Title="Date">
-                                    <Template Context="item">@item.EventDate?.ToString("d")</Template>
+                                <RadzenDataGridColumn TItem="AttendanceEventDto" Title="Dates">
+                                    <Template Context="item">@FormatEventDates(item)</Template>
                                 </RadzenDataGridColumn>
                                 <RadzenDataGridColumn TItem="AttendanceEventDto" Property="Location" Title="Location" />
                                 <RadzenDataGridColumn TItem="AttendanceEventDto" Property="DefaultVolunteerHours" Title="Default Hours" />
@@ -217,11 +225,8 @@ else
 
                         <RadzenDataGrid TItem="AttendeeDto"
                                         Data="@attendeeRows"
-                                        Count="@attendeesCount"
-                                        LoadData="LoadAttendeesAsync"
                                         AllowPaging="true"
                                         AllowSorting="true"
-                                        AllowVirtualization="true"
                                         PageSize="10"
                                         EmptyText="No attendees found."
                                         RowSelect="OnAttendeeRowSelected">
@@ -287,11 +292,8 @@ else
 
                         <RadzenDataGrid TItem="AttendanceRecordDto"
                                         Data="@recordRows"
-                                        Count="@recordsCount"
-                                        LoadData="LoadRecordsAsync"
                                         AllowPaging="true"
                                         AllowSorting="true"
-                                        AllowVirtualization="true"
                                         PageSize="10"
                                         EmptyText="No attendance records found."
                                         RowSelect="OnRecordRowSelected">
@@ -352,6 +354,7 @@ else
     private int attendeeCurrentPage = 1;
     private bool isBusy;
     private bool isLoadingSelectedEventPeople;
+    private bool isLoadingAttendanceData;
     private bool hasLoadedAttendanceData;
     private string? attendeeSearchTerm;
     private string? errorMessage;
@@ -375,17 +378,79 @@ else
         await EnsureAttendanceDataLoadedAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await EnsureAttendanceDataLoadedAsync();
+        }
+    }
+
     private async Task EnsureAttendanceDataLoadedAsync()
     {
-        if (hasLoadedAttendanceData || !UserSession.IsAuthenticated || !UserSession.CanManageUsers)
+        if (hasLoadedAttendanceData || isLoadingAttendanceData || !UserSession.IsAuthenticated || !UserSession.CanManageUsers)
         {
             return;
         }
 
-        await LoadLookupDataAsync();
-        await LoadEventsListAsync();
-        await LoadSummaryAsync();
-        hasLoadedAttendanceData = true;
+        isLoadingAttendanceData = true;
+        try
+        {
+            await LoadEventsListAsync();
+            await LoadLookupDataAsync();
+            await LoadAttendeeRowsAsync();
+            await LoadRecordRowsAsync();
+            await LoadSummaryAsync();
+            hasLoadedAttendanceData = true;
+        }
+        finally
+        {
+            isLoadingAttendanceData = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LoadAttendeeRowsAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var result = string.IsNullOrWhiteSpace(attendeeSearchTerm)
+                ? await AttendeesApi.GetPagedAsync(1, 250, cancellationToken)
+                : await AttendeesApi.SearchAsync(attendeeSearchTerm, 1, 250, cancellationToken);
+
+            attendeeRows.Clear();
+            attendeeRows.AddRange(result.Items.OrderBy(x => x.LastName).ThenBy(x => x.FirstName));
+            attendeesCount = result.TotalCount;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load attendees.", ex);
+        }
+    }
+
+    private async Task LoadRecordRowsAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var request = new AttendanceSearchRequestDto
+            {
+                NameOrSchool = recordsSearch.NameOrSchool,
+                AttendeeType = recordsSearch.AttendeeType,
+                EventId = recordsSearch.EventId,
+                AttendanceDate = recordsSearch.AttendanceDate,
+                Page = 1,
+                PageSize = 250
+            };
+
+            var result = await RecordsApi.SearchAsync(request, cancellationToken);
+            recordRows.Clear();
+            recordRows.AddRange(result.Items.OrderByDescending(x => x.AttendanceDate));
+            recordsCount = result.TotalCount;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load attendance records.", ex);
+        }
     }
 
     private async Task ForceReloadAttendanceDataAsync()
@@ -412,10 +477,6 @@ else
                 .OrderByDescending(x => x.EventDate)
                 .ThenByDescending(x => x.EventId)
                 .ToList();
-
-            eventRows.Clear();
-            eventRows.AddRange(orderedAllEvents);
-            eventsCount = eventRows.Count;
 
             activeEvents.Clear();
             activeEvents.AddRange(orderedAllEvents.Where(x => x.Active).OrderBy(x => x.EventDate));
@@ -741,13 +802,14 @@ else
 
     private async Task ReloadAttendeesAsync()
     {
-        await LoadAttendeesAsync(new LoadDataArgs { Skip = (attendeeCurrentPage - 1) * 10, Top = 10 });
+        await LoadAttendeeRowsAsync();
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task ReloadRecordsAsync()
     {
-        await LoadRecordsAsync(new LoadDataArgs { Skip = 0, Top = recordsSearch.PageSize });
+        await LoadRecordRowsAsync();
+        await LoadSummaryAsync();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -933,6 +995,18 @@ else
 
     private static string FormatName(string? firstName, string? lastName) =>
         string.Join(' ', new[] { firstName, lastName }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private static string FormatEventDates(AttendanceEventDto attendanceEvent)
+    {
+        var dates = attendanceEvent.EventDates
+            .Where(x => x.EventDate.HasValue)
+            .Select(x => x.EventDate!.Value.ToString("MMM d, yyyy"))
+            .ToArray();
+
+        return dates.Length > 0
+            ? string.Join(", ", dates)
+            : attendanceEvent.EventDate?.ToString("d") ?? "-";
+    }
 
     private static string GetEventSignInUrl(int? eventId) =>
         eventId.HasValue ? $"/attendance/sign-in/{eventId.Value}" : string.Empty;
