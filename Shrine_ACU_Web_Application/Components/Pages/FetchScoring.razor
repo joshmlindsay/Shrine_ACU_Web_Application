@@ -323,24 +323,43 @@ else
                 }
                 else
                 {
-                    <RadzenDataGrid Data="@scoreboardRows" TItem="ScoreboardRow" AllowPaging="true" PageSize="10" EmptyText="No final scores found.">
-                        <Columns>
-                            <RadzenDataGridColumn TItem="ScoreboardRow" Property="Rank" Title="Rank" Width="80px" />
-                            <RadzenDataGridColumn TItem="ScoreboardRow" Property="EntryLabel" Title="Entry" />
-                            <RadzenDataGridColumn TItem="ScoreboardRow" Property="Vin" Title="VIN" Width="220px" />
-                            <RadzenDataGridColumn TItem="ScoreboardRow" Title="Score" Width="120px">
-                                <Template Context="item">
-                                    @DisplayScore(item.Score)
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="ScoreboardRow" Title="Calculated" Width="200px">
-                                <Template Context="item">
-                                    @DisplayDateTime(item.CalculatedDate)
-                                </Template>
-                            </RadzenDataGridColumn>
-                            <RadzenDataGridColumn TItem="ScoreboardRow" Property="CalculationSummary" Title="Summary" />
-                        </Columns>
-                    </RadzenDataGrid>
+                    @if (scoringSectionOptions.Any())
+                    {
+                        <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="6" SizeLG="4">
+                                <RadzenFormField Text="Filter by scoring section" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenDropDown TValue="string"
+                                                    Data="@scoringSectionOptions"
+                                                    Value="@selectedScoringSection"
+                                                    ValueChanged="@OnScoringSectionChanged"
+                                                    AllowClear="true"
+                                                    Placeholder="Overall final score"
+                                                    Style="width:100%;" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                        </RadzenRow>
+                    }
+
+                    <div style="overflow-x:auto;">
+                        <RadzenDataGrid Data="@scoreboardRows" TItem="ScoreboardRow" AllowPaging="true" PageSize="10" EmptyText="No final scores found." AllowColumnResize="true" ColumnWidth="150px" Style="width:100%;">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="ScoreboardRow" Property="Rank" Title="Rank" Width="80px" />
+                                <RadzenDataGridColumn TItem="ScoreboardRow" Property="EntryLabel" Title="Entry" Width="220px" />
+                                <RadzenDataGridColumn TItem="ScoreboardRow" Property="Vin" Title="VIN" Width="220px" />
+                                <RadzenDataGridColumn TItem="ScoreboardRow" Title="@(string.IsNullOrWhiteSpace(selectedScoringSection) ? "Final Score" : $"{selectedScoringSection} Score")" Width="150px">
+                                    <Template Context="item">
+                                        @DisplayScore(GetRowScore(item))
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="ScoreboardRow" Title="Calculated" Width="200px">
+                                    <Template Context="item">
+                                        @DisplayDateTime(item.CalculatedDate)
+                                    </Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="ScoreboardRow" Property="CalculationSummary" Title="Summary" Width="350px" />
+                            </Columns>
+                        </RadzenDataGrid>
+                    </div>
                 }
             </RadzenStack>
         </RadzenCard>
@@ -367,6 +386,13 @@ else
     private List<QuestionAnswerModel> questionAnswers = [];
     private List<CarShowFinalScoreDto> finalScores = [];
     private List<ScoreboardRow> scoreboardRows = [];
+    private string? selectedScoringSection;
+
+    private List<string> scoringSectionOptions => scoreboardRows
+        .SelectMany(row => row.SectionScores.Keys)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+        .ToList();
 
     private Dictionary<int, CarShowAnswerDto> existingAnswersByQuestionId = [];
     private Dictionary<int, string> questionLabelsById = [];
@@ -687,7 +713,7 @@ else
                 }
                 catch (Microsoft.Kiota.Abstractions.ApiException)
                 {
-                    // No persisted final score exists for this entry yet — this is expected.
+                    // No persisted final score exists for this entry yet ï¿½ this is expected.
                 }
             }
         };
@@ -865,18 +891,101 @@ else
     private void BuildScoreboardRows()
     {
         scoreboardRows = finalScores
-            .OrderByDescending(x => x.Score ?? double.MinValue)
-            .ThenBy(x => x.EntryId ?? int.MaxValue)
-            .Select((score, index) => new ScoreboardRow
+            .Select(score => new ScoreboardRow
             {
-                Rank = index + 1,
+                EntryId = score.EntryId,
                 EntryLabel = BuildScoreboardEntryLabel(score),
                 Vin = score.Vin ?? "-",
                 Score = score.Score,
                 CalculatedDate = score.CalculatedDate,
-                CalculationSummary = FormatCalculationSummary(score.CalculationSummary)
+                CalculationSummary = FormatCalculationSummary(score.CalculationSummary),
+                SectionScores = ExtractSectionScores(score.CalculationSummary)
             })
             .ToList();
+
+        RankScoreboardRows();
+
+        if (!string.IsNullOrWhiteSpace(selectedScoringSection)
+            && !scoringSectionOptions.Contains(selectedScoringSection, StringComparer.OrdinalIgnoreCase))
+        {
+            selectedScoringSection = null;
+        }
+    }
+
+    private void RankScoreboardRows()
+    {
+        var ordered = scoreboardRows
+            .OrderByDescending(row => GetRowScore(row))
+            .ThenBy(row => row.EntryId ?? int.MaxValue)
+            .ToList();
+
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            ordered[index].Rank = index + 1;
+        }
+
+        scoreboardRows = ordered;
+    }
+
+    private double? GetRowScore(ScoreboardRow row)
+    {
+        if (string.IsNullOrWhiteSpace(selectedScoringSection))
+        {
+            return row.Score;
+        }
+
+        return row.SectionScores.TryGetValue(selectedScoringSection, out var sectionScore) ? sectionScore : null;
+    }
+
+    private void OnScoringSectionChanged(string? section)
+    {
+        selectedScoringSection = section;
+        RankScoreboardRows();
+    }
+
+    private static Dictionary<string, double?> ExtractSectionScores(string? summary)
+    {
+        var sectionScores = new Dictionary<string, double?>(StringComparer.OrdinalIgnoreCase);
+
+        if (string.IsNullOrWhiteSpace(summary))
+        {
+            return sectionScores;
+        }
+
+        var trimmed = summary.Trim();
+        if (!trimmed.StartsWith("{", StringComparison.Ordinal) && !trimmed.StartsWith("[", StringComparison.Ordinal))
+        {
+            return sectionScores;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(trimmed);
+            var root = document.RootElement;
+
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("QuestionGroupScores", out var questionGroups)
+                || questionGroups.ValueKind != JsonValueKind.Array)
+            {
+                return sectionScores;
+            }
+
+            foreach (var group in questionGroups.EnumerateArray())
+            {
+                var name = GetJsonString(group, "GroupName");
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                sectionScores[name] = GetJsonDouble(group, "Score");
+            }
+        }
+        catch
+        {
+        }
+
+        return sectionScores;
     }
 
     private static string FormatCalculationSummary(string? summary)
@@ -1376,10 +1485,12 @@ else
     private sealed class ScoreboardRow
     {
         public int Rank { get; set; }
+        public int? EntryId { get; set; }
         public string EntryLabel { get; set; } = string.Empty;
         public string Vin { get; set; } = string.Empty;
         public double? Score { get; set; }
         public DateTimeOffset? CalculatedDate { get; set; }
         public string CalculationSummary { get; set; } = string.Empty;
+        public Dictionary<string, double?> SectionScores { get; set; } = [];
     }
 }
