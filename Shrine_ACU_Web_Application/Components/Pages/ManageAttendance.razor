@@ -17,7 +17,7 @@
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in to manage attendance.</RadzenAlert>
 }
-else if (!UserSession.CanManageUsers)
+else if (!UserSession.CanManageAttendance)
 {
     <RadzenAlert AlertStyle="AlertStyle.Warning">Your account does not have permission to manage attendance.</RadzenAlert>
 }

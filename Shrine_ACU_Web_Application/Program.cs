@@ -41,6 +41,7 @@ builder.Services.AddScoped<AppThemeService>();
 builder.Services.AddScoped<AttendanceEventsApiClient>();
 builder.Services.AddScoped<AttendeesApiClient>();
 builder.Services.AddScoped<AttendanceRecordsApiClient>();
+builder.Services.AddScoped<UserRolesApiClient>();
 
 builder.Services.AddScoped<AcuCarShowClient.AcuCarShowClient>((sp) =>
 {

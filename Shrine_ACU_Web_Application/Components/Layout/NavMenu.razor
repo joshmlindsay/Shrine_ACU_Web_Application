@@ -67,18 +67,24 @@
                             </div>
                         }
 
-                        @if (UserSession.CanManageUsers)
+                        @if (UserSession.CanManageCarShows)
                         {
                             <div class="nav-item px-3">
                                 <NavLink class="nav-link" href="manage-carshows">
                                     Manage Events
                                 </NavLink>
                             </div>
+                        }
+                        @if (UserSession.CanManageAttendance)
+                        {
                             <div class="nav-item px-3">
                                 <NavLink class="nav-link" href="manage-attendance">
                                     Manage Attendance
                                 </NavLink>
                             </div>
+                        }
+                        @if (UserSession.CanManageUsers)
+                        {
                             <div class="nav-item px-3">
                                 <NavLink class="nav-link" href="manage-users">
                                     Manage Users
@@ -86,7 +92,7 @@
                             </div>
                         }
 
-                        @if (UserSession.CanAccessScoring)
+                        @if (UserSession.CanAccessScoringApplication)
                         {
                             <div class="nav-item px-3">
                                 <NavLink class="nav-link" href="fetch-scoring">
