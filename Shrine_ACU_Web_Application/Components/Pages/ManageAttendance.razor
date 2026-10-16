@@ -9,6 +9,7 @@
 @inject NavigationManager Navigation
 @inject IWebHostEnvironment Environment
 @inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>Manage Attendance</PageTitle>
 
@@ -169,6 +170,11 @@ else
                                 </RadzenDataGridColumn>
                                 <RadzenDataGridColumn TItem="AttendanceEventDto" Property="Location" Title="Location" />
                                 <RadzenDataGridColumn TItem="AttendanceEventDto" Property="DefaultVolunteerHours" Title="Default Hours" />
+                                <RadzenDataGridColumn TItem="AttendanceEventDto" Title="Sign-In Page" Sortable="false" Filterable="false">
+                                    <Template Context="item">
+                                        <RadzenButton Text="Open Sign-In" Icon="launch" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Light" Click="@(() => OpenEventSignIn(item.EventId))" />
+                                    </Template>
+                                </RadzenDataGridColumn>
                                 <RadzenDataGridColumn TItem="AttendanceEventDto" Title="Active">
                                     <Template Context="item">@((item.Active) ? "Yes" : "No")</Template>
                                 </RadzenDataGridColumn>
@@ -360,6 +366,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         LoadAttendeeQueryState();
+        UserSession.StateChanged += HandleUserSessionChanged;
         await EnsureAttendanceDataLoadedAsync();
     }
 
@@ -385,6 +392,15 @@ else
     {
         hasLoadedAttendanceData = false;
         await EnsureAttendanceDataLoadedAsync();
+    }
+
+    private void HandleUserSessionChanged()
+    {
+        _ = InvokeAsync(async () =>
+        {
+            await EnsureAttendanceDataLoadedAsync();
+            StateHasChanged();
+        });
     }
 
     private async Task LoadLookupDataAsync()
@@ -921,6 +937,15 @@ else
     private static string GetEventSignInUrl(int? eventId) =>
         eventId.HasValue ? $"/attendance/sign-in/{eventId.Value}" : string.Empty;
 
+    private void OpenEventSignIn(int? eventId)
+    {
+        var url = GetEventSignInUrl(eventId);
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            Navigation.NavigateTo(url);
+        }
+    }
+
     private void ResetNewEvent()
     {
         newEvent.Name = null;
@@ -973,6 +998,11 @@ else
         }
 
         return NormalizeDates(dates);
+    }
+
+    public void Dispose()
+    {
+        UserSession.StateChanged -= HandleUserSessionChanged;
     }
 
     private sealed record AttendeeOption
