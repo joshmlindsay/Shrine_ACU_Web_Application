@@ -14,15 +14,18 @@ public sealed class UserSessionService
 
     private readonly global::AcuCarShowClient.AcuCarShowClient _client;
     private readonly UserRolesApiClient _userRolesApi;
+    private readonly UserEventRolesApiClient _userEventRolesApi;
     private readonly ILogger<UserSessionService> _logger;
     private readonly List<AppUserDto> _availableUsers = [];
     private IReadOnlyList<UserRoleContextDto> _roleContexts = [];
+    private IReadOnlyList<UserEventRoleContextDto> _eventRoleContexts = [];
     private IJSRuntime? _jsRuntime;
 
-    public UserSessionService(global::AcuCarShowClient.AcuCarShowClient client, UserRolesApiClient userRolesApi, ILogger<UserSessionService> logger)
+    public UserSessionService(global::AcuCarShowClient.AcuCarShowClient client, UserRolesApiClient userRolesApi, UserEventRolesApiClient userEventRolesApi, ILogger<UserSessionService> logger)
     {
         _client = client;
         _userRolesApi = userRolesApi;
+        _userEventRolesApi = userEventRolesApi;
         _logger = logger;
     }
 
@@ -36,6 +39,7 @@ public sealed class UserSessionService
     public bool IsAuthenticated => CurrentUser is not null;
     public IReadOnlyList<UserApplicationAccessDto> Accesses => CurrentUser?.ApplicationAccesses ?? [];
     public IReadOnlyList<UserRoleContextDto> RoleContexts => _roleContexts;
+    public IReadOnlyList<UserEventRoleContextDto> EventRoleContexts => _eventRoleContexts;
 
     private PermissionPolicy CurrentPolicy => ResolvePolicy(Accesses);
 
@@ -45,9 +49,9 @@ public sealed class UserSessionService
     public bool CanRead => CurrentPolicy.CanRead;
     public bool CanManageUsers => CurrentPolicy.CanManageUsers;
     public bool CanAccessScoring => CurrentPolicy.CanAccessScoring;
-    public bool CanManageAttendance => _roleContexts.Count == 0 ? CanManageUsers : CanManageApplication("attendance");
-    public bool CanAccessScoringApplication => _roleContexts.Count == 0 ? CanAccessScoring : CanAccessApplication("scor", "judg", "car show", "carshow");
-    public bool CanManageCarShows => _roleContexts.Count == 0 ? CanManageUsers : CanManageApplication("car show", "carshow", "scor", "judg");
+    public bool CanManageAttendance => ResolveScopedManagePermission(CanManageUsers, "attendance");
+    public bool CanAccessScoringApplication => ResolveScopedAccessPermission(CanAccessScoring, "scor", "judg", "car show", "carshow");
+    public bool CanManageCarShows => ResolveScopedManagePermission(CanManageUsers, "car show", "carshow", "scor", "judg");
 
     public int? EffectiveUserId => EffectiveUser?.UserId;
 
@@ -128,6 +132,7 @@ public sealed class UserSessionService
             // judge) take effect immediately on the user's next login.
             await RefreshApplicationAccessesAsync(user);
             await RefreshRoleContextsAsync(user.UserId);
+            await RefreshEventRoleContextsAsync(user.UserId);
 
             CurrentUser = user;
             EffectiveUser = user;
@@ -172,6 +177,7 @@ public sealed class UserSessionService
             // details on why a partial/stale collection must not be trusted as-is.
             await RefreshApplicationAccessesAsync(refreshed);
             await RefreshRoleContextsAsync(refreshed.UserId);
+            await RefreshEventRoleContextsAsync(refreshed.UserId);
 
             CurrentUser = refreshed;
             EffectiveUser ??= refreshed;
@@ -301,6 +307,7 @@ public sealed class UserSessionService
         EffectiveUser = null;
         _availableUsers.Clear();
         _roleContexts = [];
+        _eventRoleContexts = [];
 
         if (_jsRuntime is not null)
         {
@@ -323,6 +330,7 @@ public sealed class UserSessionService
         EffectiveUser = null;
         _availableUsers.Clear();
         _roleContexts = [];
+        _eventRoleContexts = [];
         NotifyStateChanged();
     }
 
@@ -338,6 +346,42 @@ public sealed class UserSessionService
         return _roleContexts.Any(context =>
             MatchesApplication(context, applicationNameTokens) &&
             (context.CanManage || context.IsAdmin || context.IsManager));
+    }
+
+    private bool ResolveScopedManagePermission(bool fallback, params string[] applicationNameTokens)
+    {
+        if (IsAdmin)
+        {
+            return true;
+        }
+
+        if (_roleContexts.Count == 0)
+        {
+            return fallback;
+        }
+
+        var hasNamedContext = _roleContexts.Any(context => MatchesApplication(context, applicationNameTokens));
+        return hasNamedContext
+            ? CanManageApplication(applicationNameTokens)
+            : fallback;
+    }
+
+    private bool ResolveScopedAccessPermission(bool fallback, params string[] applicationNameTokens)
+    {
+        if (IsAdmin)
+        {
+            return true;
+        }
+
+        if (_roleContexts.Count == 0)
+        {
+            return fallback;
+        }
+
+        var hasNamedContext = _roleContexts.Any(context => MatchesApplication(context, applicationNameTokens));
+        return hasNamedContext
+            ? CanAccessApplication(applicationNameTokens)
+            : fallback;
     }
 
     public async Task EnsureAdminUsersLoadedAsync()
@@ -365,6 +409,25 @@ public sealed class UserSessionService
         {
             _logger.LogWarning(ex, "Unable to refresh role contexts for user {UserId}.", userId);
             _roleContexts = [];
+        }
+    }
+
+    private async Task RefreshEventRoleContextsAsync(int? userId)
+    {
+        if (!userId.HasValue)
+        {
+            _eventRoleContexts = [];
+            return;
+        }
+
+        try
+        {
+            _eventRoleContexts = await _userEventRolesApi.GetUserEventContextsAsync(userId.Value);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Unable to refresh event role contexts for user {UserId}.", userId);
+            _eventRoleContexts = [];
         }
     }
 

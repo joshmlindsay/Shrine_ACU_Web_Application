@@ -3,6 +3,8 @@
 
 @inject AcuCarShowClient Client
 @inject UserRolesApiClient UserRolesApi
+@inject UserEventRolesApiClient UserEventRolesApi
+@inject AttendanceEventsApiClient AttendanceEventsApi
 @inject UserSessionService UserSession
 @inject DialogService DialogService
 @inject IWebHostEnvironment Environment
@@ -57,7 +59,7 @@ else
                         <RadzenRow AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
                             <RadzenColumn>
                                 <RadzenText TextStyle="TextStyle.H6">Role Access: @GetDisplayName(selectedUser)</RadzenText>
-                                <RadzenText TextStyle="TextStyle.Body2">Roles are scoped to the selected application. Assign Manager to the Attendance application to manage attendance without granting scoring-event administration.</RadzenText>
+                                <RadzenText TextStyle="TextStyle.Body2">Roles can be assigned by application and by attendance event.</RadzenText>
                             </RadzenColumn>
                             <RadzenColumn Size="12" SizeMD="2">
                                 <RadzenButton Text="Close" Icon="close" ButtonStyle="ButtonStyle.Light" Click="CloseRoleEditor" />
@@ -82,7 +84,32 @@ else
                                 </RadzenStack>
                             </RadzenColumn>
                         </RadzenRow>
-                        <RadzenButton Text="Save Role Access" Icon="save" ButtonStyle="ButtonStyle.Primary" Disabled="@(isBusy || !selectedApplicationId.HasValue)" Click="SaveRoleContextAsync" />
+                        <RadzenButton Text="Save Application Role" Icon="save" ButtonStyle="ButtonStyle.Primary" Disabled="@(isBusy || !selectedApplicationId.HasValue)" Click="SaveRoleContextAsync" />
+
+                        <RadzenDivider />
+
+                        <RadzenText TextStyle="TextStyle.H6">Attendance Event Role</RadzenText>
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Attendance Event" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenDropDown TValue="int?" Data="@attendanceEvents" TextProperty="Name" ValueProperty="EventId" @bind-Value="selectedAttendanceEventId" Change="LoadSelectedEventRoleContextAsync" Style="width:100%;" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenFormField Text="Event Role" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenDropDown TValue="UserAccessRole" Data="@assignableRoles" @bind-Value="eventRoleEditor.AccessRoles" Style="width:100%;" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4">
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="1rem" Style="padding-top:1rem;">
+                                    <RadzenCheckBox TValue="bool" @bind-Value="eventRoleEditor.CanRead" Name="eventRoleCanRead" /><label for="eventRoleCanRead">Read</label>
+                                    <RadzenCheckBox TValue="bool" @bind-Value="eventRoleEditor.CanWrite" Name="eventRoleCanWrite" /><label for="eventRoleCanWrite">Write</label>
+                                    <RadzenCheckBox TValue="bool" @bind-Value="eventRoleEditor.CanManage" Name="eventRoleCanManage" /><label for="eventRoleCanManage">Manage</label>
+                                </RadzenStack>
+                            </RadzenColumn>
+                        </RadzenRow>
+
+                        <RadzenButton Text="Save Event Role" Icon="event_available" ButtonStyle="ButtonStyle.Secondary" Disabled="@(isBusy || !selectedAttendanceEventId.HasValue)" Click="SaveEventRoleContextAsync" />
                     </RadzenStack>
                 </RadzenCard>
             }
@@ -124,10 +151,13 @@ else
 @code {
     private List<AppUserDto> users = [];
     private List<ApplicationDto> applications = [];
+    private List<AttendanceEventDto> attendanceEvents = [];
     private readonly UserAccessRole[] assignableRoles = [UserAccessRole.None, UserAccessRole.Participant, UserAccessRole.Judge, UserAccessRole.Manager, UserAccessRole.Admin];
     private AppUserDto? selectedUser;
     private int? selectedApplicationId;
+    private int? selectedAttendanceEventId;
     private UserRoleUpsertRequestDto roleEditor = new();
+    private UserEventRoleUpsertRequestDto eventRoleEditor = new();
     private bool isBusy;
     private string? errorMessage;
     private string? successMessage;
@@ -169,6 +199,12 @@ else
                 .OrderBy(application => application.Name)
                 .ToList();
 
+            attendanceEvents = (await AttendanceEventsApi.GetAllAsync())
+                .Where(eventRow => eventRow.EventId.HasValue)
+                .OrderByDescending(eventRow => eventRow.EventDates.OrderByDescending(dateRow => dateRow.EventDate).FirstOrDefault()?.EventDate)
+                .ThenBy(eventRow => eventRow.Name)
+                .ToList();
+
             foreach (var user in users.Where(user => user.UserId.HasValue))
             {
                 user.ApplicationAccesses = await Client.Api.UserApplicationAccess.User[user.UserId!.Value].GetAsync() ?? [];
@@ -191,14 +227,19 @@ else
         selectedApplicationId = applications.FirstOrDefault(application =>
             application.Name?.Contains("attendance", StringComparison.OrdinalIgnoreCase) == true)?.ApplicationId
             ?? applications.FirstOrDefault()?.ApplicationId;
+        selectedAttendanceEventId = attendanceEvents.FirstOrDefault()?.EventId;
+
         await LoadSelectedRoleContextAsync();
+        await LoadSelectedEventRoleContextAsync();
     }
 
     private void CloseRoleEditor()
     {
         selectedUser = null;
         selectedApplicationId = null;
+        selectedAttendanceEventId = null;
         roleEditor = new();
+        eventRoleEditor = new();
     }
 
     private async Task LoadSelectedRoleContextAsync()
@@ -238,7 +279,7 @@ else
         try
         {
             await UserRolesApi.UpsertContextAsync(userId, applicationId, roleEditor);
-            successMessage = $"Role access was updated for {GetDisplayName(selectedUser)}.";
+            successMessage = $"Application role access was updated for {GetDisplayName(selectedUser)}.";
             await LoadUsersAsync();
 
             if (userId == UserSession.CurrentUser?.UserId)
@@ -249,6 +290,60 @@ else
         catch (Exception ex)
         {
             errorMessage = BuildErrorMessage("Unable to save role access.", ex);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task LoadSelectedEventRoleContextAsync()
+    {
+        if (selectedUser?.UserId is not int userId || selectedAttendanceEventId is not int eventId)
+        {
+            eventRoleEditor = new();
+            return;
+        }
+
+        try
+        {
+            var context = await UserEventRolesApi.GetContextAsync(userId, eventId);
+            eventRoleEditor = new UserEventRoleUpsertRequestDto
+            {
+                AccessRoles = context?.AccessRoles ?? UserAccessRole.None,
+                CanRead = context?.CanRead ?? false,
+                CanWrite = context?.CanWrite ?? false,
+                CanManage = context?.CanManage ?? false
+            };
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load the selected event role context.", ex);
+        }
+    }
+
+    private async Task SaveEventRoleContextAsync()
+    {
+        if (selectedUser?.UserId is not int userId || selectedAttendanceEventId is not int eventId)
+        {
+            return;
+        }
+
+        ResetMessages();
+        isBusy = true;
+        try
+        {
+            await UserEventRolesApi.UpsertContextAsync(userId, eventId, eventRoleEditor);
+            successMessage = $"Attendance event role access was updated for {GetDisplayName(selectedUser)}.";
+
+            if (userId == UserSession.CurrentUser?.UserId)
+            {
+                await UserSession.RefreshCurrentUserAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to save event role access.", ex);
         }
         finally
         {
