@@ -170,18 +170,25 @@ public abstract class AttendanceApiClientBase
                     return messageProp.GetString();
                 }
 
+                if (doc.RootElement.TryGetProperty("errors", out var errorsProp) && errorsProp.ValueKind == JsonValueKind.Object)
+                {
+                    var validationErrors = errorsProp.EnumerateObject()
+                        .SelectMany(error => error.Value.ValueKind == JsonValueKind.Array
+                            ? error.Value.EnumerateArray().Select(item => item.GetString())
+                            : [])
+                        .Where(text => !string.IsNullOrWhiteSpace(text))
+                        .Take(3)
+                        .ToArray();
+
+                    if (validationErrors.Length > 0)
+                    {
+                        return string.Join(" ", validationErrors);
+                    }
+                }
+
                 if (doc.RootElement.TryGetProperty("title", out var titleProp))
                 {
                     return titleProp.GetString();
-                }
-
-                if (doc.RootElement.TryGetProperty("errors", out var errorsProp) && errorsProp.ValueKind == JsonValueKind.Object)
-                {
-                    var first = errorsProp.EnumerateObject().FirstOrDefault();
-                    if (first.Value.ValueKind == JsonValueKind.Array && first.Value.GetArrayLength() > 0)
-                    {
-                        return first.Value[0].GetString();
-                    }
                 }
             }
         }

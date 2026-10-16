@@ -55,21 +55,16 @@ else
                                     </RadzenColumn>
                                 </RadzenRow>
                                 <RadzenRow Gap="1rem">
-                                    <RadzenColumn Size="12" SizeMD="4">
-                                        <RadzenFormField Text="Event Date" Variant="Variant.Outlined" Style="width:100%;">
-                                            <RadzenDatePicker @bind-Value="newEvent.EventDate" Style="width:100%;" />
-                                        </RadzenFormField>
-                                    </RadzenColumn>
-                                    <RadzenColumn Size="12" SizeMD="4">
+                                    <RadzenColumn Size="12" SizeMD="6">
                                         <RadzenFormField Text="Default Volunteer Hours" Variant="Variant.Outlined" Style="width:100%;">
                                             <RadzenNumeric @bind-Value="newEvent.DefaultVolunteerHours" Step="0.25" Min="0" Style="width:100%;" />
                                         </RadzenFormField>
                                     </RadzenColumn>
-                                    <RadzenColumn Size="12" SizeMD="2">
+                                    <RadzenColumn Size="12" SizeMD="3">
                                         <RadzenCheckBox @bind-Value="newEvent.VolunteerHoursApplicable" TValue="bool" Name="volunteerHoursApplicable" />
                                         <label for="volunteerHoursApplicable" class="ms-2">Hours Apply</label>
                                     </RadzenColumn>
-                                    <RadzenColumn Size="12" SizeMD="2">
+                                    <RadzenColumn Size="12" SizeMD="3">
                                         <RadzenCheckBox @bind-Value="newEvent.Active" TValue="bool" Name="activeEvent" />
                                         <label for="activeEvent" class="ms-2">Active</label>
                                     </RadzenColumn>
@@ -104,21 +99,16 @@ else
                                         </RadzenColumn>
                                     </RadzenRow>
                                     <RadzenRow Gap="1rem">
-                                        <RadzenColumn Size="12" SizeMD="4">
-                                            <RadzenFormField Text="Event Date" Variant="Variant.Outlined" Style="width:100%;">
-                                                <RadzenDatePicker @bind-Value="selectedEvent.EventDate" Style="width:100%;" />
-                                            </RadzenFormField>
-                                        </RadzenColumn>
-                                        <RadzenColumn Size="12" SizeMD="4">
+                                        <RadzenColumn Size="12" SizeMD="6">
                                             <RadzenFormField Text="Default Volunteer Hours" Variant="Variant.Outlined" Style="width:100%;">
                                                 <RadzenNumeric @bind-Value="selectedEvent.DefaultVolunteerHours" Step="0.25" Min="0" Style="width:100%;" />
                                             </RadzenFormField>
                                         </RadzenColumn>
-                                        <RadzenColumn Size="12" SizeMD="2">
+                                        <RadzenColumn Size="12" SizeMD="3">
                                             <RadzenCheckBox @bind-Value="selectedEvent.VolunteerHoursApplicable" TValue="bool" Name="volunteerHoursApplicableEdit" />
                                             <label for="volunteerHoursApplicableEdit" class="ms-2">Hours Apply</label>
                                         </RadzenColumn>
-                                        <RadzenColumn Size="12" SizeMD="2">
+                                        <RadzenColumn Size="12" SizeMD="3">
                                             <RadzenCheckBox @bind-Value="selectedEvent.Active" TValue="bool" Name="activeEventEdit" />
                                             <label for="activeEventEdit" class="ms-2">Active</label>
                                         </RadzenColumn>
@@ -303,7 +293,6 @@ else
     {
         Active = true,
         VolunteerHoursApplicable = true,
-        EventDate = DateTime.Today,
         DefaultVolunteerHours = 1
     };
 
@@ -396,7 +385,7 @@ else
     private Task OnEventRowSelected(AttendanceEventDto model)
     {
         selectedEvent = CloneEvent(model);
-        selectedEventDates = NormalizeDates(selectedEvent.EventDates);
+        selectedEventDates = BuildEventDatesForEdit(selectedEvent.EventDate, selectedEvent.EventDates);
         successMessage = null;
         return Task.CompletedTask;
     }
@@ -405,8 +394,9 @@ else
     {
         await RunBusyAsync(async () =>
         {
+            newEvent.EventDates = BuildEventDatesForSave(newEventDates).ToArray();
+            newEvent.EventDate = newEvent.EventDates.FirstOrDefault();
             ValidateEvent(newEvent);
-            newEvent.EventDates = NormalizeDates(newEventDates).ToArray();
             var created = await EventsApi.CreateAsync(newEvent);
             successMessage = $"Attendance event '{created?.Name ?? newEvent.Name}' created.";
             ResetNewEvent();
@@ -423,8 +413,9 @@ else
 
         await RunBusyAsync(async () =>
         {
+            selectedEvent.EventDates = BuildEventDatesForSave(selectedEventDates).ToArray();
+            selectedEvent.EventDate = selectedEvent.EventDates.FirstOrDefault();
             ValidateEvent(selectedEvent);
-            selectedEvent.EventDates = NormalizeDates(selectedEventDates).ToArray();
             await EventsApi.UpdateAsync(eventId, selectedEvent);
             successMessage = "Attendance event updated.";
             await LoadLookupDataAsync();
@@ -742,6 +733,11 @@ else
         {
             throw new InvalidOperationException("Event name is required.");
         }
+
+        if (model.EventDates is null || model.EventDates.Length == 0)
+        {
+            throw new InvalidOperationException("At least one event date is required.");
+        }
     }
 
     private static void ValidateAttendee(AttendeeDto model)
@@ -829,7 +825,7 @@ else
     {
         newEvent.Name = null;
         newEvent.Location = null;
-        newEvent.EventDate = DateTime.Today;
+        newEvent.EventDate = null;
         newEvent.EventDates = [];
         newEventDates = [];
         newEvent.VolunteerHoursApplicable = true;
@@ -855,6 +851,21 @@ else
             .Distinct()
             .OrderBy(x => x)
             .ToArray();
+
+    private static IEnumerable<DateTime> BuildEventDatesForSave(IEnumerable<DateTime>? selectedDates) =>
+        NormalizeDates(selectedDates);
+
+    private static IEnumerable<DateTime> BuildEventDatesForEdit(DateTime? eventDate, IEnumerable<DateTime>? selectedDates)
+    {
+        var dates = NormalizeDates(selectedDates).ToList();
+
+        if (dates.Count == 0 && eventDate.HasValue)
+        {
+            dates.Add(eventDate.Value.Date);
+        }
+
+        return NormalizeDates(dates);
+    }
 
     private sealed record AttendeeOption
     {
