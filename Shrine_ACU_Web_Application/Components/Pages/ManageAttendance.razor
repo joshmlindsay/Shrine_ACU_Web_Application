@@ -370,6 +370,18 @@ else
             var result = await EventsApi.GetPagedAsync(page, top, eventsLoadCts.Token);
 
             eventRows.Clear();
+
+            if (result.TotalCount == 0 && (result.Items is null || result.Items.Count == 0))
+            {
+                var allEvents = await EventsApi.GetAllAsync(eventsLoadCts.Token);
+                eventsCount = allEvents.Count;
+                eventRows.AddRange(allEvents
+                    .OrderByDescending(x => x.EventDate)
+                    .Skip(skip)
+                    .Take(top));
+                return;
+            }
+
             eventRows.AddRange(result.Items);
             eventsCount = result.TotalCount;
         }
