@@ -66,9 +66,6 @@
                             ValueChanged="OnAttendeeSelected"
                             AllowFiltering="true"
                             AllowClear="true"
-                            FilterAsYouType="true"
-                            FilterDelay="250"
-                            LoadData="OnAttendeeLoadDataAsync"
                             Placeholder="Start typing your name"
                             Style="width:100%;font-size:1.05rem;" />
 
@@ -140,7 +137,6 @@
     private string? attendeeSearchTerm;
     private string? errorMessage;
     private string? successMessage;
-    private CancellationTokenSource? attendeeLookupCts;
 
     private AttendanceEventDto? selectedEvent => activeEvents.FirstOrDefault(x => x.EventId == selectedEventId);
 
@@ -181,6 +177,7 @@
                 }
             }
 
+            await LoadAttendeeSuggestionsAsync();
             await LoadTodayRecordsAsync();
         }
         catch (Exception ex)
@@ -189,78 +186,50 @@
         }
     }
 
-    private Task OnEventChanged(int? eventId)
+    private async Task OnEventChanged(int? eventId)
     {
         selectedEventId = eventId;
         signInModel.EventId = eventId ?? 0;
         successMessage = null;
-        return LoadTodayRecordsAsync();
+        await LoadAttendeeSuggestionsAsync();
+        await LoadTodayRecordsAsync();
     }
 
-    private async Task OnAttendeeLoadDataAsync(LoadDataArgs args)
-    {
-        attendeeSearchTerm = args.Filter;
-        attendeeLookupCts?.Cancel();
-        attendeeLookupCts = new CancellationTokenSource();
-
-        try
-        {
-            await SearchAttendeesAsync(attendeeSearchTerm, attendeeLookupCts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
-    private async Task SearchAttendeesAsync(string? term, CancellationToken cancellationToken)
+    private async Task LoadAttendeeSuggestionsAsync()
     {
         attendeeSuggestions.Clear();
 
-        if (string.IsNullOrWhiteSpace(term))
-        {
-            selectedAttendeeId = null;
-            return;
-        }
-
         try
         {
-            var normalizedTerm = term.Trim();
-            var page = await AttendeesApi.SearchAsync(normalizedTerm, 1, 25, cancellationToken);
-            var directMatches = page.Items
+            var attendees = await AttendeesApi.GetPagedAsync(1, 250);
+            var merged = attendees.Items
                 .Where(x => x.AttendeeId.HasValue)
                 .Select(x => new AttendeeSuggestion(x))
                 .ToList();
 
-            attendeeSuggestions.AddRange(directMatches.OrderBy(x => x.DisplayName));
-
-            if (attendeeSuggestions.Count == 0 && selectedEventId.HasValue)
+            if (selectedEventId.HasValue)
             {
                 var recordMatches = await RecordsApi.SearchAsync(new AttendanceSearchRequestDto
                 {
-                    NameOrSchool = normalizedTerm,
                     EventId = selectedEventId,
                     Page = 1,
-                    PageSize = 50
-                }, cancellationToken);
+                    PageSize = 250
+                });
 
-                var fallbackAttendees = recordMatches.Items
+                merged.AddRange(recordMatches.Items
                     .Select(x => x.Attendee)
                     .Where(x => x?.AttendeeId.HasValue == true)
-                    .Select(x => new AttendeeSuggestion(x!))
-                    .GroupBy(x => x.AttendeeId)
-                    .Select(x => x.First())
-                    .OrderBy(x => x.DisplayName)
-                    .ToList();
-
-                attendeeSuggestions.AddRange(fallbackAttendees);
+                    .Select(x => new AttendeeSuggestion(x!)));
             }
-        }
-        catch (OperationCanceledException)
-        {
+
+            attendeeSuggestions.AddRange(merged
+                .GroupBy(x => x.AttendeeId)
+                .Select(x => x.First())
+                .OrderBy(x => x.DisplayName));
         }
         catch (Exception ex)
         {
-            errorMessage = BuildErrorMessage("Unable to search attendees.", ex);
+            errorMessage = BuildErrorMessage("Unable to load attendee list.", ex);
         }
     }
 

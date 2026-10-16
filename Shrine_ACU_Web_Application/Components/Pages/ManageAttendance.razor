@@ -150,11 +150,8 @@ else
 
                         <RadzenDataGrid TItem="AttendanceEventDto"
                                         Data="@eventRows"
-                                        Count="@eventsCount"
-                                        LoadData="LoadEventsAsync"
                                         AllowPaging="true"
                                         AllowSorting="true"
-                                        AllowVirtualization="true"
                                         PageSize="10"
                                         EmptyText="No attendance events found."
                                         RowSelect="OnEventRowSelected">
@@ -356,6 +353,7 @@ else
     {
         LoadAttendeeQueryState();
         await LoadLookupDataAsync();
+        await LoadEventsListAsync();
         await LoadSummaryAsync();
     }
 
@@ -363,9 +361,18 @@ else
     {
         try
         {
-            var events = await EventsApi.GetActiveAsync();
+            var allEvents = await EventsApi.GetAllAsync();
+            var orderedAllEvents = allEvents
+                .OrderByDescending(x => x.EventDate)
+                .ThenByDescending(x => x.EventId)
+                .ToList();
+
+            eventRows.Clear();
+            eventRows.AddRange(orderedAllEvents);
+            eventsCount = eventRows.Count;
+
             activeEvents.Clear();
-            activeEvents.AddRange(events.OrderBy(x => x.EventDate));
+            activeEvents.AddRange(orderedAllEvents.Where(x => x.Active).OrderBy(x => x.EventDate));
 
             var attendees = await AttendeesApi.GetPagedAsync(1, 250);
             recordAttendeeOptions.Clear();
@@ -377,16 +384,13 @@ else
         }
     }
 
-    private async Task LoadEventsAsync(LoadDataArgs args)
+    private async Task LoadEventsListAsync()
     {
         eventsLoadCts?.Cancel();
         eventsLoadCts = new CancellationTokenSource();
 
         try
         {
-            var top = args.Top ?? 10;
-            var skip = args.Skip ?? 0;
-
             var allEvents = await EventsApi.GetAllAsync(eventsLoadCts.Token);
             var orderedEvents = allEvents
                 .OrderByDescending(x => x.EventDate)
@@ -394,8 +398,8 @@ else
                 .ToList();
 
             eventRows.Clear();
-            eventsCount = orderedEvents.Count;
-            eventRows.AddRange(orderedEvents.Skip(skip).Take(top));
+            eventRows.AddRange(orderedEvents);
+            eventsCount = eventRows.Count;
         }
         catch (OperationCanceledException)
         {
@@ -462,6 +466,7 @@ else
             successMessage = $"Attendance event '{created?.Name ?? newEvent.Name}' created.";
             ResetNewEvent();
             await LoadLookupDataAsync();
+            await LoadEventsListAsync();
         });
     }
 
@@ -481,6 +486,7 @@ else
             await EventsApi.UpdateAsync(eventId, selectedEvent);
             successMessage = "Attendance event updated.";
             await LoadLookupDataAsync();
+            await LoadEventsListAsync();
         });
     }
 
@@ -498,6 +504,7 @@ else
             selectedEvent = null;
             selectedEventPeople.Clear();
             await LoadLookupDataAsync();
+            await LoadEventsListAsync();
         });
     }
 
