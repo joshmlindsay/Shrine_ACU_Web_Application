@@ -79,7 +79,8 @@
         uri.Contains("/fetch-login", StringComparison.OrdinalIgnoreCase) ||
         uri.Contains("/fetch-register", StringComparison.OrdinalIgnoreCase) ||
         uri.Contains("/fetch-forgot-password", StringComparison.OrdinalIgnoreCase) ||
-        uri.Contains("/fetch-reset-password", StringComparison.OrdinalIgnoreCase);
+        uri.Contains("/fetch-reset-password", StringComparison.OrdinalIgnoreCase) ||
+        uri.Contains("/attendance/sign-in", StringComparison.OrdinalIgnoreCase);
 
     private void HandleStateChanged() => InvokeAsync(StateHasChanged);
 

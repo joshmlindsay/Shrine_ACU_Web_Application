@@ -1,0 +1,831 @@
+@page "/manage-attendance"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.WebUtilities
+@inject AttendanceEventsApiClient EventsApi
+@inject AttendeesApiClient AttendeesApi
+@inject AttendanceRecordsApiClient RecordsApi
+@inject UserSessionService UserSession
+@inject NavigationManager Navigation
+@inject IWebHostEnvironment Environment
+@inject IJSRuntime JS
+
+<PageTitle>Manage Attendance</PageTitle>
+
+@if (!UserSession.IsAuthenticated)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">You must log in to manage attendance.</RadzenAlert>
+}
+else if (!UserSession.CanManageUsers)
+{
+    <RadzenAlert AlertStyle="AlertStyle.Warning">Your account does not have permission to manage attendance.</RadzenAlert>
+}
+else
+{
+    <RadzenStack Gap="1rem">
+        <RadzenText TextStyle="TextStyle.H4">Manage Attendance</RadzenText>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(successMessage))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Success">@successMessage</RadzenAlert>
+        }
+
+        <RadzenTabs>
+            <Tabs>
+                <RadzenTabsItem Text="Events">
+                    <RadzenStack Gap="1rem">
+                        <RadzenCard>
+                            <RadzenStack Gap="1rem">
+                                <RadzenText TextStyle="TextStyle.H6">Create Event</RadzenText>
+                                <RadzenRow Gap="1rem">
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Name" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextBox @bind-Value="newEvent.Name" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="6">
+                                        <RadzenFormField Text="Location" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenTextBox @bind-Value="newEvent.Location" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                </RadzenRow>
+                                <RadzenRow Gap="1rem">
+                                    <RadzenColumn Size="12" SizeMD="4">
+                                        <RadzenFormField Text="Event Date" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenDatePicker @bind-Value="newEvent.EventDate" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="4">
+                                        <RadzenFormField Text="Default Volunteer Hours" Variant="Variant.Outlined" Style="width:100%;">
+                                            <RadzenNumeric @bind-Value="newEvent.DefaultVolunteerHours" Step="0.25" Min="0" Style="width:100%;" />
+                                        </RadzenFormField>
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="2">
+                                        <RadzenCheckBox @bind-Value="newEvent.VolunteerHoursApplicable" TValue="bool" Name="volunteerHoursApplicable" />
+                                        <label for="volunteerHoursApplicable" class="ms-2">Hours Apply</label>
+                                    </RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="2">
+                                        <RadzenCheckBox @bind-Value="newEvent.Active" TValue="bool" Name="activeEvent" />
+                                        <label for="activeEvent" class="ms-2">Active</label>
+                                    </RadzenColumn>
+                                </RadzenRow>
+                                <RadzenButton Text="Create Event" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="CreateEventAsync" Disabled="isBusy" />
+                            </RadzenStack>
+                        </RadzenCard>
+
+                        @if (selectedEvent?.EventId is int)
+                        {
+                            <RadzenCard>
+                                <RadzenStack Gap="1rem">
+                                    <RadzenText TextStyle="TextStyle.H6">Edit Event</RadzenText>
+                                    <RadzenRow Gap="1rem">
+                                        <RadzenColumn Size="12" SizeMD="6">
+                                            <RadzenFormField Text="Name" Variant="Variant.Outlined" Style="width:100%;">
+                                                <RadzenTextBox @bind-Value="selectedEvent.Name" Style="width:100%;" />
+                                            </RadzenFormField>
+                                        </RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="6">
+                                            <RadzenFormField Text="Location" Variant="Variant.Outlined" Style="width:100%;">
+                                                <RadzenTextBox @bind-Value="selectedEvent.Location" Style="width:100%;" />
+                                            </RadzenFormField>
+                                        </RadzenColumn>
+                                    </RadzenRow>
+                                    <RadzenRow Gap="1rem">
+                                        <RadzenColumn Size="12" SizeMD="4">
+                                            <RadzenFormField Text="Event Date" Variant="Variant.Outlined" Style="width:100%;">
+                                                <RadzenDatePicker @bind-Value="selectedEvent.EventDate" Style="width:100%;" />
+                                            </RadzenFormField>
+                                        </RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="4">
+                                            <RadzenFormField Text="Default Volunteer Hours" Variant="Variant.Outlined" Style="width:100%;">
+                                                <RadzenNumeric @bind-Value="selectedEvent.DefaultVolunteerHours" Step="0.25" Min="0" Style="width:100%;" />
+                                            </RadzenFormField>
+                                        </RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="2">
+                                            <RadzenCheckBox @bind-Value="selectedEvent.VolunteerHoursApplicable" TValue="bool" Name="volunteerHoursApplicableEdit" />
+                                            <label for="volunteerHoursApplicableEdit" class="ms-2">Hours Apply</label>
+                                        </RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="2">
+                                            <RadzenCheckBox @bind-Value="selectedEvent.Active" TValue="bool" Name="activeEventEdit" />
+                                            <label for="activeEventEdit" class="ms-2">Active</label>
+                                        </RadzenColumn>
+                                    </RadzenRow>
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                        <RadzenButton Text="Save Event" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="UpdateEventAsync" Disabled="isBusy" />
+                                        <RadzenButton Text="Delete Event" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="DeleteEventAsync" Disabled="isBusy" />
+                                    </RadzenStack>
+                                    <RadzenText TextStyle="TextStyle.Caption">Sign-in URL: @GetEventSignInUrl(selectedEvent.EventId)</RadzenText>
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+
+                        <RadzenDataGrid TItem="AttendanceEventDto"
+                                        Data="@eventRows"
+                                        Count="@eventsCount"
+                                        LoadData="LoadEventsAsync"
+                                        AllowPaging="true"
+                                        AllowSorting="true"
+                                        AllowVirtualization="true"
+                                        PageSize="10"
+                                        EmptyText="No attendance events found."
+                                        RowSelect="OnEventRowSelected">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="AttendanceEventDto" Property="Name" Title="Event" />
+                                <RadzenDataGridColumn TItem="AttendanceEventDto" Title="Date">
+                                    <Template Context="item">@item.EventDate?.ToString("d")</Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AttendanceEventDto" Property="Location" Title="Location" />
+                                <RadzenDataGridColumn TItem="AttendanceEventDto" Property="DefaultVolunteerHours" Title="Default Hours" />
+                                <RadzenDataGridColumn TItem="AttendanceEventDto" Title="Active">
+                                    <Template Context="item">@((item.Active) ? "Yes" : "No")</Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </RadzenStack>
+                </RadzenTabsItem>
+
+                <RadzenTabsItem Text="Attendees">
+                    <RadzenStack Gap="1rem">
+                        <RadzenRow AlignItems="AlignItems.End" Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="6">
+                                <RadzenFormField Text="Search" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenTextBox @bind-Value="attendeeSearchTerm" @oninput="OnAttendeeSearchInput" Style="width:100%;" Placeholder="Search by name or school" />
+                                </RadzenFormField>
+                            </RadzenColumn>
+                        </RadzenRow>
+
+                        @if (selectedAttendee?.AttendeeId is int)
+                        {
+                            <RadzenCard>
+                                <RadzenStack Gap="1rem">
+                                    <RadzenText TextStyle="TextStyle.H6">Edit Attendee</RadzenText>
+                                    <RadzenRow Gap="1rem">
+                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="First Name" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="selectedAttendee.FirstName" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Last Name" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="selectedAttendee.LastName" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="School" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="selectedAttendee.SchoolName" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                    </RadzenRow>
+                                    <RadzenRow Gap="1rem">
+                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Type" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="AttendeeType" Data="@attendeeTypes" Value="@selectedAttendee.AttendeeType" ValueChanged="@(type => selectedAttendee.AttendeeType = type)" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="2"><RadzenCheckBox @bind-Value="selectedAttendee.Active" TValue="bool" Name="attendeeActive" /><label for="attendeeActive" class="ms-2">Active</label></RadzenColumn>
+                                    </RadzenRow>
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                        <RadzenButton Text="Save" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="UpdateAttendeeAsync" Disabled="isBusy" />
+                                        <RadzenButton Text="Delete" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="DeleteAttendeeAsync" Disabled="isBusy" />
+                                    </RadzenStack>
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+
+                        <RadzenDataGrid TItem="AttendeeDto"
+                                        Data="@attendeeRows"
+                                        Count="@attendeesCount"
+                                        LoadData="LoadAttendeesAsync"
+                                        AllowPaging="true"
+                                        AllowSorting="true"
+                                        AllowVirtualization="true"
+                                        PageSize="10"
+                                        EmptyText="No attendees found."
+                                        RowSelect="OnAttendeeRowSelected">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="AttendeeDto" Title="Name">
+                                    <Template Context="item">@FormatName(item.FirstName, item.LastName)</Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AttendeeDto" Property="SchoolName" Title="School" />
+                                <RadzenDataGridColumn TItem="AttendeeDto" Property="AttendeeType" Title="Type" />
+                                <RadzenDataGridColumn TItem="AttendeeDto" Title="Active">
+                                    <Template Context="item">@((item.Active) ? "Yes" : "No")</Template>
+                                </RadzenDataGridColumn>
+                            </Columns>
+                        </RadzenDataGrid>
+                    </RadzenStack>
+                </RadzenTabsItem>
+
+                <RadzenTabsItem Text="Attendance Records">
+                    <RadzenStack Gap="1rem">
+                        <RadzenCard>
+                            <RadzenStack Gap="1rem">
+                                <RadzenText TextStyle="TextStyle.H6">Filters</RadzenText>
+                                <RadzenRow Gap="1rem">
+                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Name or school" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="recordsSearch.NameOrSchool" @oninput="OnRecordsFilterInput" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Event" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int?" Data="@activeEvents" TextProperty="Name" ValueProperty="EventId" @bind-Value="recordsSearch.EventId" AllowClear="true" Style="width:100%;" Change="@(_ => OnRecordsFilterChangedAsync())" /></RadzenFormField></RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Type" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="AttendeeType?" Data="@attendeeTypeFilterOptions" @bind-Value="recordsSearch.AttendeeType" AllowClear="true" Style="width:100%;" Change="@(_ => OnRecordsFilterChangedAsync())" /></RadzenFormField></RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Attendance Date" Variant="Variant.Outlined" Style="width:100%;"><RadzenDatePicker @bind-Value="recordsSearch.AttendanceDate" DateFormat="yyyy-MM-dd" Style="width:100%;" Change="@(_ => OnRecordsFilterChangedAsync())" /></RadzenFormField></RadzenColumn>
+                                </RadzenRow>
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    <RadzenButton Text="Refresh" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="@(_ => ReloadRecordsAsync())" />
+                                    <RadzenButton Text="Export Excel" Icon="download" ButtonStyle="ButtonStyle.Secondary" Click="ExportExcelAsync" Disabled="isBusy" />
+                                    <RadzenButton Text="Export Google Sheets (CSV)" Icon="table_view" ButtonStyle="ButtonStyle.Secondary" Click="ExportGoogleSheetsAsync" Disabled="isBusy" />
+                                </RadzenStack>
+                            </RadzenStack>
+                        </RadzenCard>
+
+                        <RadzenRow Gap="1rem">
+                            <RadzenColumn Size="12" SizeMD="4"><RadzenCard><RadzenText TextStyle="TextStyle.H6">Total Records</RadzenText><RadzenText TextStyle="TextStyle.H4">@summary.TotalRecords</RadzenText></RadzenCard></RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4"><RadzenCard><RadzenText TextStyle="TextStyle.H6">Total Hours</RadzenText><RadzenText TextStyle="TextStyle.H4">@summary.TotalDurationHours</RadzenText></RadzenCard></RadzenColumn>
+                            <RadzenColumn Size="12" SizeMD="4"><RadzenCard><RadzenText TextStyle="TextStyle.H6">By Type</RadzenText><RadzenText TextStyle="TextStyle.Body2">@SummaryTypeText()</RadzenText></RadzenCard></RadzenColumn>
+                        </RadzenRow>
+
+                        @if (selectedRecord?.AttendanceRecordId is int)
+                        {
+                            <RadzenCard>
+                                <RadzenStack Gap="1rem">
+                                    <RadzenText TextStyle="TextStyle.H6">Edit Attendance Record</RadzenText>
+                                    <RadzenRow Gap="1rem">
+                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Event" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int" Data="@activeEvents" TextProperty="Name" ValueProperty="EventId" Value="@selectedRecord.EventId" ValueChanged="@(value => selectedRecord.EventId = value)" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Attendee" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int" Data="@recordAttendeeOptions" TextProperty="DisplayName" ValueProperty="AttendeeId" Value="@selectedRecord.AttendeeId" ValueChanged="@(value => selectedRecord.AttendeeId = value)" AllowFiltering="true" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Date" Variant="Variant.Outlined" Style="width:100%;"><RadzenDatePicker @bind-Value="selectedRecord.AttendanceDate" DateFormat="yyyy-MM-dd" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                    </RadzenRow>
+                                    <RadzenRow Gap="1rem">
+                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Duration Hours" Variant="Variant.Outlined" Style="width:100%;"><RadzenNumeric @bind-Value="selectedRecord.DurationHours" Min="0" Step="0.25" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                    </RadzenRow>
+                                    <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                        <RadzenButton Text="Save Record" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="UpdateRecordAsync" Disabled="isBusy" />
+                                        <RadzenButton Text="Delete Record" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="DeleteRecordAsync" Disabled="isBusy" />
+                                    </RadzenStack>
+                                </RadzenStack>
+                            </RadzenCard>
+                        }
+
+                        <RadzenDataGrid TItem="AttendanceRecordDto"
+                                        Data="@recordRows"
+                                        Count="@recordsCount"
+                                        LoadData="LoadRecordsAsync"
+                                        AllowPaging="true"
+                                        AllowSorting="true"
+                                        AllowVirtualization="true"
+                                        PageSize="10"
+                                        EmptyText="No attendance records found."
+                                        RowSelect="OnRecordRowSelected">
+                            <Columns>
+                                <RadzenDataGridColumn TItem="AttendanceRecordDto" Title="Event">
+                                    <Template Context="item">@item.Event?.Name</Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AttendanceRecordDto" Title="Name">
+                                    <Template Context="item">@FormatName(item.Attendee?.FirstName, item.Attendee?.LastName)</Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AttendanceRecordDto" Property="Attendee.SchoolName" Title="School" />
+                                <RadzenDataGridColumn TItem="AttendanceRecordDto" Title="Date">
+                                    <Template Context="item">@item.AttendanceDate.ToString("yyyy-MM-dd")</Template>
+                                </RadzenDataGridColumn>
+                                <RadzenDataGridColumn TItem="AttendanceRecordDto" Property="DurationHours" Title="Hours" />
+                            </Columns>
+                        </RadzenDataGrid>
+                    </RadzenStack>
+                </RadzenTabsItem>
+            </Tabs>
+        </RadzenTabs>
+    </RadzenStack>
+}
+
+@code {
+    private readonly AttendanceEventDto newEvent = new()
+    {
+        Active = true,
+        VolunteerHoursApplicable = true,
+        EventDate = DateTime.Today,
+        DefaultVolunteerHours = 1
+    };
+
+    private readonly List<AttendanceEventDto> eventRows = [];
+    private readonly List<AttendeeDto> attendeeRows = [];
+    private readonly List<AttendanceRecordDto> recordRows = [];
+    private readonly List<AttendanceEventDto> activeEvents = [];
+    private readonly List<AttendeeOption> recordAttendeeOptions = [];
+    private readonly AttendeeType[] attendeeTypes = [AttendeeType.Student, AttendeeType.Employee, AttendeeType.Guest];
+    private readonly AttendeeType?[] attendeeTypeFilterOptions = [null, AttendeeType.Student, AttendeeType.Employee, AttendeeType.Guest];
+
+    private readonly AttendanceSearchRequestDto recordsSearch = new()
+    {
+        Page = 1,
+        PageSize = 10
+    };
+
+    private AttendanceSummaryDto summary = new();
+    private AttendanceEventDto? selectedEvent;
+    private AttendeeDto? selectedAttendee;
+    private AttendanceRecordDto? selectedRecord;
+
+    private int eventsCount;
+    private int attendeesCount;
+    private int recordsCount;
+    private int attendeeCurrentPage = 1;
+    private bool isBusy;
+    private string? attendeeSearchTerm;
+    private string? errorMessage;
+    private string? successMessage;
+
+    private CancellationTokenSource? eventsLoadCts;
+    private CancellationTokenSource? attendeesLoadCts;
+    private CancellationTokenSource? recordsLoadCts;
+    private CancellationTokenSource? attendeeSearchDebounceCts;
+    private CancellationTokenSource? recordsFilterDebounceCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        LoadAttendeeQueryState();
+        await LoadLookupDataAsync();
+        await LoadSummaryAsync();
+    }
+
+    private async Task LoadLookupDataAsync()
+    {
+        try
+        {
+            var events = await EventsApi.GetActiveAsync();
+            activeEvents.Clear();
+            activeEvents.AddRange(events.OrderBy(x => x.EventDate));
+
+            var attendees = await AttendeesApi.GetPagedAsync(1, 250);
+            recordAttendeeOptions.Clear();
+            recordAttendeeOptions.AddRange(attendees.Items.Where(x => x.AttendeeId.HasValue).Select(x => new AttendeeOption(x)).OrderBy(x => x.DisplayName));
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load attendance lookup data.", ex);
+        }
+    }
+
+    private async Task LoadEventsAsync(LoadDataArgs args)
+    {
+        eventsLoadCts?.Cancel();
+        eventsLoadCts = new CancellationTokenSource();
+
+        try
+        {
+            var top = args.Top ?? 10;
+            var skip = args.Skip ?? 0;
+            var page = (skip / top) + 1;
+            var result = await EventsApi.GetPagedAsync(page, top, eventsLoadCts.Token);
+
+            eventRows.Clear();
+            eventRows.AddRange(result.Items);
+            eventsCount = result.TotalCount;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load attendance events.", ex);
+        }
+    }
+
+    private Task OnEventRowSelected(AttendanceEventDto model)
+    {
+        selectedEvent = CloneEvent(model);
+        successMessage = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task CreateEventAsync()
+    {
+        await RunBusyAsync(async () =>
+        {
+            ValidateEvent(newEvent);
+            var created = await EventsApi.CreateAsync(newEvent);
+            successMessage = $"Attendance event '{created?.Name ?? newEvent.Name}' created.";
+            ResetNewEvent();
+            await LoadLookupDataAsync();
+        });
+    }
+
+    private async Task UpdateEventAsync()
+    {
+        if (selectedEvent?.EventId is not int eventId)
+        {
+            return;
+        }
+
+        await RunBusyAsync(async () =>
+        {
+            ValidateEvent(selectedEvent);
+            await EventsApi.UpdateAsync(eventId, selectedEvent);
+            successMessage = "Attendance event updated.";
+            await LoadLookupDataAsync();
+        });
+    }
+
+    private async Task DeleteEventAsync()
+    {
+        if (selectedEvent?.EventId is not int eventId)
+        {
+            return;
+        }
+
+        await RunBusyAsync(async () =>
+        {
+            await EventsApi.DeleteAsync(eventId);
+            successMessage = "Attendance event deleted.";
+            selectedEvent = null;
+            await LoadLookupDataAsync();
+        });
+    }
+
+    private async Task LoadAttendeesAsync(LoadDataArgs args)
+    {
+        attendeesLoadCts?.Cancel();
+        attendeesLoadCts = new CancellationTokenSource();
+
+        try
+        {
+            var top = args.Top ?? 10;
+            var skip = args.Skip ?? 0;
+            var page = (skip / top) + 1;
+            attendeeCurrentPage = page;
+
+            var result = string.IsNullOrWhiteSpace(attendeeSearchTerm)
+                ? await AttendeesApi.GetPagedAsync(page, top, attendeesLoadCts.Token)
+                : await AttendeesApi.SearchAsync(attendeeSearchTerm, page, top, attendeesLoadCts.Token);
+
+            attendeeRows.Clear();
+            attendeeRows.AddRange(result.Items);
+            attendeesCount = result.TotalCount;
+            UpdateAttendeeQueryState();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load attendees.", ex);
+        }
+    }
+
+    private Task OnAttendeeRowSelected(AttendeeDto model)
+    {
+        selectedAttendee = CloneAttendee(model);
+        successMessage = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnAttendeeSearchInput(ChangeEventArgs args)
+    {
+        attendeeSearchTerm = args.Value?.ToString();
+        attendeeCurrentPage = 1;
+        await DebounceAttendeeSearchAsync();
+    }
+
+    private async Task DebounceAttendeeSearchAsync()
+    {
+        attendeeSearchDebounceCts?.Cancel();
+        attendeeSearchDebounceCts = new CancellationTokenSource();
+
+        try
+        {
+            await Task.Delay(300, attendeeSearchDebounceCts.Token);
+            UpdateAttendeeQueryState();
+            await ReloadAttendeesAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task UpdateAttendeeAsync()
+    {
+        if (selectedAttendee?.AttendeeId is not int attendeeId)
+        {
+            return;
+        }
+
+        await RunBusyAsync(async () =>
+        {
+            ValidateAttendee(selectedAttendee);
+            await AttendeesApi.UpdateAsync(attendeeId, selectedAttendee);
+            successMessage = "Attendee updated.";
+            await LoadLookupDataAsync();
+            await ReloadAttendeesAsync();
+        });
+    }
+
+    private async Task DeleteAttendeeAsync()
+    {
+        if (selectedAttendee?.AttendeeId is not int attendeeId)
+        {
+            return;
+        }
+
+        await RunBusyAsync(async () =>
+        {
+            await AttendeesApi.DeleteAsync(attendeeId);
+            successMessage = "Attendee deleted.";
+            selectedAttendee = null;
+            await LoadLookupDataAsync();
+            await ReloadAttendeesAsync();
+        });
+    }
+
+    private async Task LoadRecordsAsync(LoadDataArgs args)
+    {
+        recordsLoadCts?.Cancel();
+        recordsLoadCts = new CancellationTokenSource();
+
+        try
+        {
+            var top = args.Top ?? recordsSearch.PageSize;
+            var skip = args.Skip ?? 0;
+            recordsSearch.Page = (skip / top) + 1;
+            recordsSearch.PageSize = top;
+
+            var result = await RecordsApi.SearchAsync(recordsSearch, recordsLoadCts.Token);
+            recordRows.Clear();
+            recordRows.AddRange(result.Items);
+            recordsCount = result.TotalCount;
+            await LoadSummaryAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load attendance records.", ex);
+        }
+    }
+
+    private async Task OnRecordsFilterInput(ChangeEventArgs args)
+    {
+        recordsSearch.NameOrSchool = args.Value?.ToString();
+        await DebounceRecordFilterAsync();
+    }
+
+    private async Task OnRecordsFilterChangedAsync()
+    {
+        await ReloadRecordsAsync();
+    }
+
+    private async Task DebounceRecordFilterAsync()
+    {
+        recordsFilterDebounceCts?.Cancel();
+        recordsFilterDebounceCts = new CancellationTokenSource();
+
+        try
+        {
+            await Task.Delay(300, recordsFilterDebounceCts.Token);
+            await ReloadRecordsAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private Task OnRecordRowSelected(AttendanceRecordDto model)
+    {
+        selectedRecord = CloneRecord(model);
+        successMessage = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task UpdateRecordAsync()
+    {
+        if (selectedRecord?.AttendanceRecordId is not int recordId)
+        {
+            return;
+        }
+
+        await RunBusyAsync(async () =>
+        {
+            await RecordsApi.UpdateAsync(recordId, selectedRecord);
+            successMessage = "Attendance record updated.";
+            await ReloadRecordsAsync();
+        });
+    }
+
+    private async Task DeleteRecordAsync()
+    {
+        if (selectedRecord?.AttendanceRecordId is not int recordId)
+        {
+            return;
+        }
+
+        await RunBusyAsync(async () =>
+        {
+            await RecordsApi.DeleteAsync(recordId);
+            successMessage = "Attendance record deleted.";
+            selectedRecord = null;
+            await ReloadRecordsAsync();
+        });
+    }
+
+    private async Task ReloadAttendeesAsync()
+    {
+        await LoadAttendeesAsync(new LoadDataArgs { Skip = (attendeeCurrentPage - 1) * 10, Top = 10 });
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ReloadRecordsAsync()
+    {
+        await LoadRecordsAsync(new LoadDataArgs { Skip = 0, Top = recordsSearch.PageSize });
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ExportExcelAsync()
+    {
+        await ExportAsync(true);
+    }
+
+    private async Task ExportGoogleSheetsAsync()
+    {
+        await ExportAsync(false);
+    }
+
+    private async Task ExportAsync(bool excel)
+    {
+        await RunBusyAsync(async () =>
+        {
+            var fromDate = recordsSearch.AttendanceDate;
+            var toDate = recordsSearch.AttendanceDate;
+            var file = excel
+                ? await RecordsApi.ExportExcelAsync(recordsSearch.EventId, fromDate, toDate)
+                : await RecordsApi.ExportGoogleSheetsAsync(recordsSearch.EventId, fromDate, toDate);
+
+            var fileName = file.FileName;
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                fileName = excel ? "attendance-export.xlsx" : "attendance-export.csv";
+            }
+
+            var contentType = string.IsNullOrWhiteSpace(file.ContentType)
+                ? (excel ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : "text/csv")
+                : file.ContentType;
+
+            await JS.InvokeVoidAsync("shrineDownload.downloadFileFromBase64", fileName, contentType, Convert.ToBase64String(file.Data));
+            successMessage = "Attendance export downloaded.";
+        });
+    }
+
+    private async Task LoadSummaryAsync()
+    {
+        try
+        {
+            summary = await RecordsApi.GetSummaryAsync(recordsSearch.EventId, recordsSearch.AttendanceDate) ?? new AttendanceSummaryDto();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load attendance summary.", ex);
+        }
+    }
+
+    private string SummaryTypeText()
+    {
+        if (summary.CountByType.Count == 0)
+        {
+            return "No data";
+        }
+
+        return string.Join(" | ", summary.CountByType.Select(x => $"{x.Key}: {x.Value}"));
+    }
+
+    private async Task RunBusyAsync(Func<Task> action)
+    {
+        errorMessage = null;
+        successMessage = null;
+        isBusy = true;
+
+        try
+        {
+            await action();
+        }
+        catch (ApiErrorException ex) when (ex.Error.StatusCode == 400)
+        {
+            errorMessage = ex.Error.Message;
+        }
+        catch (ApiErrorException ex) when (ex.Error.StatusCode == 404)
+        {
+            errorMessage = "The requested item was not found or has already been removed.";
+        }
+        catch (ApiErrorException ex) when (ex.Error.StatusCode == 409)
+        {
+            errorMessage = "A conflicting attendance record already exists for the selected attendee and date.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Attendance operation failed.", ex);
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private string BuildErrorMessage(string message, Exception exception) =>
+        Environment.IsDevelopment() ? $"{message} {exception.Message}" : message;
+
+    private static void ValidateEvent(AttendanceEventDto model)
+    {
+        if (string.IsNullOrWhiteSpace(model.Name))
+        {
+            throw new InvalidOperationException("Event name is required.");
+        }
+    }
+
+    private static void ValidateAttendee(AttendeeDto model)
+    {
+        if (string.IsNullOrWhiteSpace(model.FirstName) || string.IsNullOrWhiteSpace(model.LastName))
+        {
+            throw new InvalidOperationException("Attendee first and last name are required.");
+        }
+    }
+
+    private static AttendanceEventDto CloneEvent(AttendanceEventDto source) => new()
+    {
+        EventId = source.EventId,
+        Name = source.Name,
+        Location = source.Location,
+        EventDate = source.EventDate,
+        VolunteerHoursApplicable = source.VolunteerHoursApplicable,
+        DefaultVolunteerHours = source.DefaultVolunteerHours,
+        Active = source.Active
+    };
+
+    private static AttendeeDto CloneAttendee(AttendeeDto source) => new()
+    {
+        AttendeeId = source.AttendeeId,
+        FirstName = source.FirstName,
+        LastName = source.LastName,
+        SchoolName = source.SchoolName,
+        AttendeeType = source.AttendeeType,
+        Active = source.Active
+    };
+
+    private static AttendanceRecordDto CloneRecord(AttendanceRecordDto source) => new()
+    {
+        AttendanceRecordId = source.AttendanceRecordId,
+        EventId = source.EventId,
+        AttendeeId = source.AttendeeId,
+        AttendanceDate = source.AttendanceDate,
+        DurationHours = source.DurationHours,
+        Event = source.Event,
+        Attendee = source.Attendee
+    };
+
+    private void LoadAttendeeQueryState()
+    {
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = QueryHelpers.ParseQuery(uri.Query);
+
+        if (query.TryGetValue("attendeeSearch", out var attendeeSearch))
+        {
+            attendeeSearchTerm = attendeeSearch.ToString();
+        }
+
+        if (query.TryGetValue("attendeePage", out var attendeePageText) && int.TryParse(attendeePageText, out var attendeePage) && attendeePage > 0)
+        {
+            attendeeCurrentPage = attendeePage;
+        }
+    }
+
+    private void UpdateAttendeeQueryState()
+    {
+        var query = new Dictionary<string, string>();
+
+        if (!string.IsNullOrWhiteSpace(attendeeSearchTerm))
+        {
+            query["attendeeSearch"] = attendeeSearchTerm;
+        }
+
+        if (attendeeCurrentPage > 1)
+        {
+            query["attendeePage"] = attendeeCurrentPage.ToString();
+        }
+
+        var target = query.Count == 0 ? "/manage-attendance" : QueryHelpers.AddQueryString("/manage-attendance", query);
+        Navigation.NavigateTo(target, replace: true);
+    }
+
+    private static string FormatName(string? firstName, string? lastName) =>
+        string.Join(' ', new[] { firstName, lastName }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+    private static string GetEventSignInUrl(int? eventId) =>
+        eventId.HasValue ? $"/attendance/sign-in/{eventId.Value}" : string.Empty;
+
+    private void ResetNewEvent()
+    {
+        newEvent.Name = null;
+        newEvent.Location = null;
+        newEvent.EventDate = DateTime.Today;
+        newEvent.VolunteerHoursApplicable = true;
+        newEvent.DefaultVolunteerHours = 1;
+        newEvent.Active = true;
+    }
+
+    private sealed record AttendeeOption
+    {
+        public AttendeeOption(AttendeeDto attendee)
+        {
+            AttendeeId = attendee.AttendeeId ?? 0;
+            DisplayName = FormatName(attendee.FirstName, attendee.LastName);
+            if (!string.IsNullOrWhiteSpace(attendee.SchoolName))
+            {
+                DisplayName = $"{DisplayName} ({attendee.SchoolName})";
+            }
+        }
+
+        public int AttendeeId { get; }
+        public string DisplayName { get; }
+    }
+}

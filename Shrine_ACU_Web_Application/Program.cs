@@ -3,6 +3,7 @@ using Microsoft.Kiota.Http.HttpClientLibrary;
 using Radzen;
 using Shrine_ACU_Web_Application.Components;
 using Shrine_ACU_Web_Application.Services;
+using Shrine_ACU_Web_Application.Services.Attendance;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +38,9 @@ builder.Services.AddHttpClient("AcuCarShowApi", (sp, client) =>
 
 builder.Services.AddScoped<UserSessionService>();
 builder.Services.AddScoped<AppThemeService>();
+builder.Services.AddScoped<AttendanceEventsApiClient>();
+builder.Services.AddScoped<AttendeesApiClient>();
+builder.Services.AddScoped<AttendanceRecordsApiClient>();
 
 builder.Services.AddScoped<AcuCarShowClient.AcuCarShowClient>((sp) =>
 {
