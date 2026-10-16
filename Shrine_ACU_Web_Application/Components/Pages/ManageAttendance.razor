@@ -126,6 +126,24 @@ else
                                         <RadzenButton Text="Delete Event" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="DeleteEventAsync" Disabled="isBusy" />
                                     </RadzenStack>
                                     <RadzenText TextStyle="TextStyle.Caption">Sign-in URL: @GetEventSignInUrl(selectedEvent.EventId)</RadzenText>
+
+                                    <RadzenText TextStyle="TextStyle.H6">People Seen for This Event</RadzenText>
+                                    @if (isLoadingSelectedEventPeople)
+                                    {
+                                        <RadzenProgressBarCircular Mode="ProgressBarMode.Indeterminate" />
+                                    }
+                                    else
+                                    {
+                                        <RadzenDataGrid Data="@selectedEventPeople" TItem="AttendeeDto" EmptyText="No attendees have been recorded for this event yet.">
+                                            <Columns>
+                                                <RadzenDataGridColumn TItem="AttendeeDto" Title="Name">
+                                                    <Template Context="item">@FormatName(item.FirstName, item.LastName)</Template>
+                                                </RadzenDataGridColumn>
+                                                <RadzenDataGridColumn TItem="AttendeeDto" Property="SchoolName" Title="School" />
+                                                <RadzenDataGridColumn TItem="AttendeeDto" Property="AttendeeType" Title="Type" />
+                                            </Columns>
+                                        </RadzenDataGrid>
+                                    }
                                 </RadzenStack>
                             </RadzenCard>
                         }
@@ -299,6 +317,7 @@ else
     private readonly List<AttendanceEventDto> eventRows = [];
     private readonly List<AttendeeDto> attendeeRows = [];
     private readonly List<AttendanceRecordDto> recordRows = [];
+    private readonly List<AttendeeDto> selectedEventPeople = [];
     private readonly List<AttendanceEventDto> activeEvents = [];
     private readonly List<AttendeeOption> recordAttendeeOptions = [];
     private readonly AttendeeType[] attendeeTypes = [AttendeeType.Student, AttendeeType.Employee, AttendeeType.Guest];
@@ -322,6 +341,7 @@ else
     private int recordsCount;
     private int attendeeCurrentPage = 1;
     private bool isBusy;
+    private bool isLoadingSelectedEventPeople;
     private string? attendeeSearchTerm;
     private string? errorMessage;
     private string? successMessage;
@@ -386,12 +406,48 @@ else
         }
     }
 
-    private Task OnEventRowSelected(AttendanceEventDto model)
+    private async Task OnEventRowSelected(AttendanceEventDto model)
     {
         selectedEvent = CloneEvent(model);
         selectedEventDates = BuildEventDatesForEdit(selectedEvent.EventDate, selectedEvent.EventDates);
         successMessage = null;
-        return Task.CompletedTask;
+
+        if (selectedEvent.EventId.HasValue)
+        {
+            await LoadSelectedEventPeopleAsync(selectedEvent.EventId.Value);
+        }
+    }
+
+    private async Task LoadSelectedEventPeopleAsync(int eventId)
+    {
+        isLoadingSelectedEventPeople = true;
+        selectedEventPeople.Clear();
+
+        try
+        {
+            var records = await RecordsApi.SearchAsync(new AttendanceSearchRequestDto
+            {
+                EventId = eventId,
+                Page = 1,
+                PageSize = 250
+            });
+
+            selectedEventPeople.AddRange(records.Items
+                .Select(x => x.Attendee)
+                .Where(x => x?.AttendeeId.HasValue == true)
+                .GroupBy(x => x!.AttendeeId)
+                .Select(x => x.First()!)
+                .OrderBy(x => x.LastName)
+                .ThenBy(x => x.FirstName));
+        }
+        catch (Exception ex)
+        {
+            errorMessage = BuildErrorMessage("Unable to load attendees for selected event.", ex);
+        }
+        finally
+        {
+            isLoadingSelectedEventPeople = false;
+        }
     }
 
     private async Task CreateEventAsync()
@@ -440,6 +496,7 @@ else
             await EventsApi.DeleteAsync(eventId);
             successMessage = "Attendance event deleted.";
             selectedEvent = null;
+            selectedEventPeople.Clear();
             await LoadLookupDataAsync();
         });
     }

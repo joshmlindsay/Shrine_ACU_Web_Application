@@ -56,10 +56,7 @@
 
     <RadzenCard>
         <RadzenStack Gap="1rem">
-            <RadzenTextBox @bind-Value="attendeeLookupText"
-                           @oninput="OnAttendeeLookupInput"
-                           Placeholder="Type your first or last name"
-                           Style="width:100%;font-size:1.1rem;height:52px;" />
+            <RadzenText TextStyle="TextStyle.Body2">Search and select your name below.</RadzenText>
 
             <RadzenDropDown TValue="int?"
                             Data="@attendeeSuggestions"
@@ -69,8 +66,11 @@
                             ValueChanged="OnAttendeeSelected"
                             AllowFiltering="true"
                             AllowClear="true"
-                            Placeholder="Select your name"
-                            Style="width:100%;" />
+                            FilterAsYouType="true"
+                            FilterDelay="250"
+                            LoadData="OnAttendeeLoadDataAsync"
+                            Placeholder="Start typing your name"
+                            Style="width:100%;font-size:1.05rem;" />
 
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
                 <RadzenButton Text="Can't find your name? Sign Up" Icon="person_add" ButtonStyle="ButtonStyle.Light" Click="OpenSignUpAsync" />
@@ -137,7 +137,7 @@
     private int? selectedEventId;
     private int? selectedAttendeeId;
     private bool isSubmitting;
-    private string? attendeeLookupText;
+    private string? attendeeSearchTerm;
     private string? errorMessage;
     private string? successMessage;
     private CancellationTokenSource? attendeeLookupCts;
@@ -197,21 +197,15 @@
         return LoadTodayRecordsAsync();
     }
 
-    private async Task OnAttendeeLookupInput(ChangeEventArgs args)
+    private async Task OnAttendeeLoadDataAsync(LoadDataArgs args)
     {
-        attendeeLookupText = args.Value?.ToString();
-        await DebounceLookupAsync(attendeeLookupText);
-    }
-
-    private async Task DebounceLookupAsync(string? term)
-    {
+        attendeeSearchTerm = args.Filter;
         attendeeLookupCts?.Cancel();
         attendeeLookupCts = new CancellationTokenSource();
 
         try
         {
-            await Task.Delay(250, attendeeLookupCts.Token);
-            await SearchAttendeesAsync(term, attendeeLookupCts.Token);
+            await SearchAttendeesAsync(attendeeSearchTerm, attendeeLookupCts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -230,11 +224,36 @@
 
         try
         {
-            var page = await AttendeesApi.SearchAsync(term.Trim(), 1, 25, cancellationToken);
-            attendeeSuggestions.AddRange(page.Items
+            var normalizedTerm = term.Trim();
+            var page = await AttendeesApi.SearchAsync(normalizedTerm, 1, 25, cancellationToken);
+            var directMatches = page.Items
                 .Where(x => x.AttendeeId.HasValue)
                 .Select(x => new AttendeeSuggestion(x))
-                .OrderBy(x => x.DisplayName));
+                .ToList();
+
+            attendeeSuggestions.AddRange(directMatches.OrderBy(x => x.DisplayName));
+
+            if (attendeeSuggestions.Count == 0 && selectedEventId.HasValue)
+            {
+                var recordMatches = await RecordsApi.SearchAsync(new AttendanceSearchRequestDto
+                {
+                    NameOrSchool = normalizedTerm,
+                    EventId = selectedEventId,
+                    Page = 1,
+                    PageSize = 50
+                }, cancellationToken);
+
+                var fallbackAttendees = recordMatches.Items
+                    .Select(x => x.Attendee)
+                    .Where(x => x?.AttendeeId.HasValue == true)
+                    .Select(x => new AttendeeSuggestion(x!))
+                    .GroupBy(x => x.AttendeeId)
+                    .Select(x => x.First())
+                    .OrderBy(x => x.DisplayName)
+                    .ToList();
+
+                attendeeSuggestions.AddRange(fallbackAttendees);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -263,11 +282,11 @@
     private async Task OpenSignUpAsync()
     {
         var result = await DialogService.OpenAsync<AttendanceSignUpDialog>(
-            "Quick Sign Up",
-            new Dictionary<string, object?>
-            {
-                [nameof(AttendanceSignUpDialog.InitialSearchText)] = attendeeLookupText
-            },
+        "Quick Sign Up",
+        new Dictionary<string, object?>
+        {
+            [nameof(AttendanceSignUpDialog.InitialSearchText)] = attendeeSearchTerm
+        },
             new DialogOptions
             {
                 Width = "520px",
