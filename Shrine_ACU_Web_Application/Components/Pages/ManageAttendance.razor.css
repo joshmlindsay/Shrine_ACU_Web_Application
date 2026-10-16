@@ -1,0 +1,3 @@
+.attendance-admin-tabs ::deep .rz-tabview-nav {
+    display: none;
+}

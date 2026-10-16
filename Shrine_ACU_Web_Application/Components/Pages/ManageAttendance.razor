@@ -51,7 +51,16 @@ else
             </RadzenStack>
         }
 
-        <RadzenTabs>
+        <RadzenFormField Text="Admin Section" Variant="Variant.Outlined" Style="max-width:360px;">
+            <RadzenDropDown TValue="int"
+                            Data="@adminTabOptions"
+                            TextProperty="Label"
+                            ValueProperty="Index"
+                            @bind-Value="adminTabIndex"
+                            Style="width:100%;" />
+        </RadzenFormField>
+
+        <RadzenTabs @bind-SelectedIndex="adminTabIndex" class="attendance-admin-tabs">
             <Tabs>
                 <RadzenTabsItem Text="Events">
                     <RadzenStack Gap="1rem">
@@ -218,6 +227,7 @@ else
                                     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                                         <RadzenButton Text="Save" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="UpdateAttendeeAsync" Disabled="isBusy" />
                                         <RadzenButton Text="Delete" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="DeleteAttendeeAsync" Disabled="isBusy" />
+                                        <RadzenButton Text="Close" Icon="close" ButtonStyle="ButtonStyle.Light" Click="CloseAttendeeEditor" Disabled="isBusy" />
                                     </RadzenStack>
                                 </RadzenStack>
                             </RadzenCard>
@@ -285,6 +295,7 @@ else
                                     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                                         <RadzenButton Text="Save Record" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="UpdateRecordAsync" Disabled="isBusy" />
                                         <RadzenButton Text="Delete Record" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="DeleteRecordAsync" Disabled="isBusy" />
+                                        <RadzenButton Text="Close" Icon="close" ButtonStyle="ButtonStyle.Light" Click="CloseRecordEditor" Disabled="isBusy" />
                                     </RadzenStack>
                                 </RadzenStack>
                             </RadzenCard>
@@ -326,10 +337,10 @@ else
         DefaultVolunteerHours = 1
     };
 
-    private readonly List<AttendanceEventDto> eventRows = [];
-    private readonly List<AttendeeDto> attendeeRows = [];
-    private readonly List<AttendanceRecordDto> recordRows = [];
-    private readonly List<AttendeeDto> selectedEventPeople = [];
+    private List<AttendanceEventDto> eventRows = [];
+    private List<AttendeeDto> attendeeRows = [];
+    private List<AttendanceRecordDto> recordRows = [];
+    private List<AttendeeDto> selectedEventPeople = [];
     private readonly List<AttendanceEventDto> activeEvents = [];
     private readonly List<AttendeeOption> recordAttendeeOptions = [];
     private readonly AttendeeType[] attendeeTypes = [AttendeeType.Student, AttendeeType.Employee, AttendeeType.Guest];
@@ -356,9 +367,17 @@ else
     private bool isLoadingSelectedEventPeople;
     private bool isLoadingAttendanceData;
     private bool hasLoadedAttendanceData;
+    private int adminTabIndex;
     private string? attendeeSearchTerm;
     private string? errorMessage;
     private string? successMessage;
+
+    private readonly AdminTabOption[] adminTabOptions =
+    [
+        new(0, "Events"),
+        new(1, "Attendees"),
+        new(2, "Attendance Records")
+    ];
 
     private CancellationTokenSource? eventsLoadCts;
     private CancellationTokenSource? attendeesLoadCts;
@@ -418,8 +437,7 @@ else
                 ? await AttendeesApi.GetPagedAsync(1, 250, cancellationToken)
                 : await AttendeesApi.SearchAsync(attendeeSearchTerm, 1, 250, cancellationToken);
 
-            attendeeRows.Clear();
-            attendeeRows.AddRange(result.Items.OrderBy(x => x.LastName).ThenBy(x => x.FirstName));
+            attendeeRows = result.Items.OrderBy(x => x.LastName).ThenBy(x => x.FirstName).ToList();
             attendeesCount = result.TotalCount;
         }
         catch (Exception ex)
@@ -443,8 +461,7 @@ else
             };
 
             var result = await RecordsApi.SearchAsync(request, cancellationToken);
-            recordRows.Clear();
-            recordRows.AddRange(result.Items.OrderByDescending(x => x.AttendanceDate));
+            recordRows = result.Items.OrderByDescending(x => x.AttendanceDate).ToList();
             recordsCount = result.TotalCount;
         }
         catch (Exception ex)
@@ -504,8 +521,7 @@ else
                 .ThenByDescending(x => x.EventId)
                 .ToList();
 
-            eventRows.Clear();
-            eventRows.AddRange(orderedEvents);
+            eventRows = orderedEvents;
             eventsCount = eventRows.Count;
         }
         catch (OperationCanceledException)
@@ -532,7 +548,7 @@ else
     private async Task LoadSelectedEventPeopleAsync(int eventId)
     {
         isLoadingSelectedEventPeople = true;
-        selectedEventPeople.Clear();
+        selectedEventPeople = [];
 
         try
         {
@@ -652,6 +668,11 @@ else
         return Task.CompletedTask;
     }
 
+    private void CloseAttendeeEditor()
+    {
+        selectedAttendee = null;
+    }
+
     private async Task OnAttendeeSearchInput(ChangeEventArgs args)
     {
         attendeeSearchTerm = args.Value?.ToString();
@@ -767,6 +788,11 @@ else
         selectedRecord = CloneRecord(model);
         successMessage = null;
         return Task.CompletedTask;
+    }
+
+    private void CloseRecordEditor()
+    {
+        selectedRecord = null;
     }
 
     private async Task UpdateRecordAsync()
@@ -1078,6 +1104,8 @@ else
     {
         UserSession.StateChanged -= HandleUserSessionChanged;
     }
+
+    private sealed record AdminTabOption(int Index, string Label);
 
     private sealed record AttendeeOption
     {

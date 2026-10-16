@@ -5,6 +5,7 @@
 @inject UserSessionService UserSession
 @inject DialogService DialogService
 @inject IWebHostEnvironment Environment
+@implements IDisposable
 
 <PageTitle>Manage Users</PageTitle>
 
@@ -48,7 +49,16 @@ else
         }
         else
         {
-            <RadzenDataGrid Data="@users" TItem="AppUserDto" AllowFiltering="true" AllowSorting="true" AllowPaging="true" PageSize="10" EmptyText="No users were found.">
+            <RadzenDataGrid Data="@users"
+                            TItem="AppUserDto"
+                            AllowFiltering="true"
+                            FilterMode="FilterMode.Simple"
+                            FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                            AllowSorting="true"
+                            AllowVirtualization="true"
+                            AllowPaging="false"
+                            Style="height:calc(100vh - 250px);min-height:420px;"
+                            EmptyText="No users were found.">
                 <Columns>
                     <RadzenDataGridColumn TItem="AppUserDto" Property="DisplayName" Title="Name">
                         <Template Context="user">@GetDisplayName(user)</Template>
@@ -82,10 +92,26 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        UserSession.StateChanged += HandleUserSessionChanged;
+
         if (UserSession.IsAuthenticated && UserSession.CanManageUsers)
         {
             await LoadUsersAsync();
         }
+    }
+
+    private void HandleUserSessionChanged()
+    {
+        if (!UserSession.IsAuthenticated || !UserSession.CanManageUsers || users.Count > 0 || isBusy)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadUsersAsync();
+            StateHasChanged();
+        });
     }
 
     private async Task LoadUsersAsync()
@@ -101,6 +127,7 @@ else
             {
                 user.ApplicationAccesses = await Client.Api.UserApplicationAccess.User[user.UserId!.Value].GetAsync() ?? [];
             }
+
         }
         catch (Exception ex)
         {
@@ -145,6 +172,11 @@ else
     {
         errorMessage = null;
         successMessage = null;
+    }
+
+    public void Dispose()
+    {
+        UserSession.StateChanged -= HandleUserSessionChanged;
     }
 
     private async Task ToggleJudgeAsync(AppUserDto user)
