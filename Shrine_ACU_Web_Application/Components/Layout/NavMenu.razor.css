@@ -135,6 +135,42 @@
     flex-wrap: wrap;
 }
 
+@media (max-width: 640.98px) {
+    .top-row {
+        min-height: 0;
+        height: auto;
+        padding-left: 0 !important;
+    }
+
+    .top-row .container-fluid {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        padding-block: 0.25rem;
+    }
+
+    .navbar-logo {
+        height: 2rem;
+    }
+
+    .navbar-toggler {
+        width: 2.5rem;
+        height: 2rem;
+    }
+
+    .nav-scrollable {
+        max-height: 60vh;
+        overflow-y: auto;
+        margin-top: 0.25rem;
+    }
+
+    .nav-item ::deep .nav-link {
+        height: 2.25rem;
+        line-height: 2.25rem;
+    }
+}
+
 @media (min-width: 641px) {
     .top-row {
         flex-wrap: nowrap;
