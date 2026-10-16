@@ -394,8 +394,8 @@ else
     {
         await RunBusyAsync(async () =>
         {
-            newEvent.EventDates = BuildEventDatesForSave(newEventDates).ToArray();
-            newEvent.EventDate = newEvent.EventDates.FirstOrDefault();
+            newEvent.EventDates = BuildEventDateDtosForSave(newEventDates, null).ToArray();
+            newEvent.EventDate = newEvent.EventDates.FirstOrDefault()?.EventDate;
             ValidateEvent(newEvent);
             var created = await EventsApi.CreateAsync(newEvent);
             successMessage = $"Attendance event '{created?.Name ?? newEvent.Name}' created.";
@@ -413,8 +413,8 @@ else
 
         await RunBusyAsync(async () =>
         {
-            selectedEvent.EventDates = BuildEventDatesForSave(selectedEventDates).ToArray();
-            selectedEvent.EventDate = selectedEvent.EventDates.FirstOrDefault();
+            selectedEvent.EventDates = BuildEventDateDtosForSave(selectedEventDates, eventId).ToArray();
+            selectedEvent.EventDate = selectedEvent.EventDates.FirstOrDefault()?.EventDate;
             ValidateEvent(selectedEvent);
             await EventsApi.UpdateAsync(eventId, selectedEvent);
             successMessage = "Attendance event updated.";
@@ -852,12 +852,20 @@ else
             .OrderBy(x => x)
             .ToArray();
 
-    private static IEnumerable<DateTime> BuildEventDatesForSave(IEnumerable<DateTime>? selectedDates) =>
-        NormalizeDates(selectedDates);
-
-    private static IEnumerable<DateTime> BuildEventDatesForEdit(DateTime? eventDate, IEnumerable<DateTime>? selectedDates)
+    private static IEnumerable<AttendanceEventDateDto> BuildEventDateDtosForSave(IEnumerable<DateTime>? selectedDates, int? eventId)
     {
-        var dates = NormalizeDates(selectedDates).ToList();
+        return NormalizeDates(selectedDates)
+            .Select(date => new AttendanceEventDateDto
+            {
+                EventId = eventId,
+                EventDate = date
+            })
+            .ToArray();
+    }
+
+    private static IEnumerable<DateTime> BuildEventDatesForEdit(DateTime? eventDate, IEnumerable<AttendanceEventDateDto>? selectedDates)
+    {
+        var dates = NormalizeDates(selectedDates?.Select(x => x.EventDate)).ToList();
 
         if (dates.Count == 0 && eventDate.HasValue)
         {

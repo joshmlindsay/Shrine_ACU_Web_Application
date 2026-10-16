@@ -21,7 +21,7 @@
                 <RadzenBadge Text="@selectedEvent.Name" BadgeStyle="BadgeStyle.Primary" />
                 @if (selectedEvent.EventDates?.Length > 0)
                 {
-                    <RadzenText TextStyle="TextStyle.Caption">Open on: @string.Join(", ", selectedEvent.EventDates.OrderBy(x => x).Select(x => x.ToString("MMM d")))</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption">Open on: @string.Join(", ", selectedEvent.EventDates.OrderBy(x => x.EventDate).Select(x => x.EventDate.ToString("MMM d")))</RadzenText>
                 }
             }
         </RadzenStack>
@@ -401,7 +401,7 @@
             return true;
         }
 
-        return attendanceEvent.EventDates.Any(x => x.Date == DateTime.Today);
+        return attendanceEvent.EventDates.Any(x => x.EventDate.Date == DateTime.Today);
     }
 
     private static string DisplayValue(string? value) => string.IsNullOrWhiteSpace(value) ? "Not provided" : value;
