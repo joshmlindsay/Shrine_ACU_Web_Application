@@ -23,7 +23,14 @@ else if (!UserSession.CanManageUsers)
 else
 {
     <RadzenStack Gap="1rem">
-        <RadzenText TextStyle="TextStyle.H4">Manage Attendance</RadzenText>
+        <RadzenRow AlignItems="AlignItems.Center" JustifyContent="JustifyContent.SpaceBetween">
+            <RadzenColumn Size="12" SizeMD="8">
+                <RadzenText TextStyle="TextStyle.H4">Manage Attendance</RadzenText>
+            </RadzenColumn>
+            <RadzenColumn Size="12" SizeMD="4">
+                <RadzenButton Text="Refresh" Icon="refresh" ButtonStyle="ButtonStyle.Light" Click="ForceReloadAttendanceDataAsync" Disabled="isBusy" />
+            </RadzenColumn>
+        </RadzenRow>
 
         @if (!string.IsNullOrWhiteSpace(errorMessage))
         {
@@ -339,6 +346,7 @@ else
     private int attendeeCurrentPage = 1;
     private bool isBusy;
     private bool isLoadingSelectedEventPeople;
+    private bool hasLoadedAttendanceData;
     private string? attendeeSearchTerm;
     private string? errorMessage;
     private string? successMessage;
@@ -352,9 +360,31 @@ else
     protected override async Task OnInitializedAsync()
     {
         LoadAttendeeQueryState();
+        await EnsureAttendanceDataLoadedAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await EnsureAttendanceDataLoadedAsync();
+    }
+
+    private async Task EnsureAttendanceDataLoadedAsync()
+    {
+        if (hasLoadedAttendanceData || !UserSession.IsAuthenticated || !UserSession.CanManageUsers)
+        {
+            return;
+        }
+
         await LoadLookupDataAsync();
         await LoadEventsListAsync();
         await LoadSummaryAsync();
+        hasLoadedAttendanceData = true;
+    }
+
+    private async Task ForceReloadAttendanceDataAsync()
+    {
+        hasLoadedAttendanceData = false;
+        await EnsureAttendanceDataLoadedAsync();
     }
 
     private async Task LoadLookupDataAsync()

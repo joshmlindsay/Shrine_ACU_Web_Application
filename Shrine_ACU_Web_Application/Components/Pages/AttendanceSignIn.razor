@@ -5,6 +5,7 @@
 @inject AttendanceEventsApiClient EventsApi
 @inject AttendeesApiClient AttendeesApi
 @inject AttendanceRecordsApiClient RecordsApi
+@inject AcuCarShowClient Client
 @inject DialogService DialogService
 @inject IWebHostEnvironment Environment
 
@@ -222,6 +223,14 @@
                     .Select(x => new AttendeeSuggestion(x!)));
             }
 
+            if (merged.Count == 0)
+            {
+                var appUsers = await Client.Api.AppUsers.GetAsync() ?? [];
+                merged.AddRange(appUsers
+                    .Where(x => x.UserId.HasValue)
+                    .Select(x => new AttendeeSuggestion(x, ToSyntheticAttendeeId(x.UserId!.Value))));
+            }
+
             attendeeSuggestions.AddRange(merged
                 .GroupBy(x => x.AttendeeId)
                 .Select(x => x.First())
@@ -394,6 +403,8 @@
 
     private static string DisplayValue(string? value) => string.IsNullOrWhiteSpace(value) ? "Not provided" : value;
 
+    private static int ToSyntheticAttendeeId(int userId) => (userId + 1) * -1;
+
     private sealed record AttendeeSuggestion
     {
         public AttendeeSuggestion(AttendeeDto attendee)
@@ -406,6 +417,21 @@
             DisplayName = string.IsNullOrWhiteSpace(SchoolName)
                 ? $"{FirstName} {LastName}".Trim()
                 : $"{FirstName} {LastName}".Trim() + $" ({SchoolName})";
+        }
+
+        public AttendeeSuggestion(AppUserDto user, int syntheticAttendeeId)
+        {
+            AttendeeId = syntheticAttendeeId;
+            FirstName = user.FirstName;
+            LastName = user.LastName;
+            SchoolName = null;
+            AttendeeType = AttendeeType.Student;
+            DisplayName = string.Join(' ', new[] { user.FirstName, user.LastName }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
+
+            if (string.IsNullOrWhiteSpace(DisplayName))
+            {
+                DisplayName = user.DisplayName ?? user.Username ?? $"User {user.UserId}";
+            }
         }
 
         public int? AttendeeId { get; }
