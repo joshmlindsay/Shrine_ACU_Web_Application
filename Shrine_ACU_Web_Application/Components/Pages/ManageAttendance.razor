@@ -366,24 +366,16 @@ else
         {
             var top = args.Top ?? 10;
             var skip = args.Skip ?? 0;
-            var page = (skip / top) + 1;
-            var result = await EventsApi.GetPagedAsync(page, top, eventsLoadCts.Token);
+
+            var allEvents = await EventsApi.GetAllAsync(eventsLoadCts.Token);
+            var orderedEvents = allEvents
+                .OrderByDescending(x => x.EventDate)
+                .ThenByDescending(x => x.EventId)
+                .ToList();
 
             eventRows.Clear();
-
-            if (result.TotalCount == 0 && (result.Items is null || result.Items.Count == 0))
-            {
-                var allEvents = await EventsApi.GetAllAsync(eventsLoadCts.Token);
-                eventsCount = allEvents.Count;
-                eventRows.AddRange(allEvents
-                    .OrderByDescending(x => x.EventDate)
-                    .Skip(skip)
-                    .Take(top));
-                return;
-            }
-
-            eventRows.AddRange(result.Items);
-            eventsCount = result.TotalCount;
+            eventsCount = orderedEvents.Count;
+            eventRows.AddRange(orderedEvents.Skip(skip).Take(top));
         }
         catch (OperationCanceledException)
         {
