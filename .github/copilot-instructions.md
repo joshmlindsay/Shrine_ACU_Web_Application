@@ -6,3 +6,6 @@
 - Show detailed error messages during debugging sessions, but provide user-friendly non-detailed errors outside of debug mode.
 - Prefer using Radzen components/elements whenever they are available, especially on Blazor pages.
 - Ensure all components and pages adhere to the user's selected light/dark theme consistently.
+
+## Implementation Expectations
+- Minimize clarification loops and focus on direct implementation progress once sufficient context is provided.

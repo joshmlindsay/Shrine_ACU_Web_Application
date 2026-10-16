@@ -74,6 +74,14 @@ else
                                         <label for="activeEvent" class="ms-2">Active</label>
                                     </RadzenColumn>
                                 </RadzenRow>
+                                <RadzenFormField Text="Allowed Event Dates (multi-select)" Variant="Variant.Outlined" Style="width:100%;">
+                                    <RadzenDatePicker TValue="IEnumerable<DateTime>"
+                                                      Value="@newEventDates"
+                                                      ValueChanged="OnNewEventDatesChanged"
+                                                      Multiple="true"
+                                                      DateFormat="yyyy-MM-dd"
+                                                      Style="width:100%;" />
+                                </RadzenFormField>
                                 <RadzenButton Text="Create Event" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="CreateEventAsync" Disabled="isBusy" />
                             </RadzenStack>
                         </RadzenCard>
@@ -115,6 +123,14 @@ else
                                             <label for="activeEventEdit" class="ms-2">Active</label>
                                         </RadzenColumn>
                                     </RadzenRow>
+                                    <RadzenFormField Text="Allowed Event Dates (multi-select)" Variant="Variant.Outlined" Style="width:100%;">
+                                        <RadzenDatePicker TValue="IEnumerable<DateTime>"
+                                                          Value="@selectedEventDates"
+                                                          ValueChanged="OnSelectedEventDatesChanged"
+                                                          Multiple="true"
+                                                          DateFormat="yyyy-MM-dd"
+                                                          Style="width:100%;" />
+                                    </RadzenFormField>
                                     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                                         <RadzenButton Text="Save Event" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="UpdateEventAsync" Disabled="isBusy" />
                                         <RadzenButton Text="Delete Event" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="DeleteEventAsync" Disabled="isBusy" />
@@ -309,6 +325,8 @@ else
     private AttendanceEventDto? selectedEvent;
     private AttendeeDto? selectedAttendee;
     private AttendanceRecordDto? selectedRecord;
+    private IEnumerable<DateTime> newEventDates = [];
+    private IEnumerable<DateTime> selectedEventDates = [];
 
     private int eventsCount;
     private int attendeesCount;
@@ -378,6 +396,7 @@ else
     private Task OnEventRowSelected(AttendanceEventDto model)
     {
         selectedEvent = CloneEvent(model);
+        selectedEventDates = NormalizeDates(selectedEvent.EventDates);
         successMessage = null;
         return Task.CompletedTask;
     }
@@ -387,6 +406,7 @@ else
         await RunBusyAsync(async () =>
         {
             ValidateEvent(newEvent);
+            newEvent.EventDates = NormalizeDates(newEventDates).ToArray();
             var created = await EventsApi.CreateAsync(newEvent);
             successMessage = $"Attendance event '{created?.Name ?? newEvent.Name}' created.";
             ResetNewEvent();
@@ -404,6 +424,7 @@ else
         await RunBusyAsync(async () =>
         {
             ValidateEvent(selectedEvent);
+            selectedEvent.EventDates = NormalizeDates(selectedEventDates).ToArray();
             await EventsApi.UpdateAsync(eventId, selectedEvent);
             successMessage = "Attendance event updated.";
             await LoadLookupDataAsync();
@@ -737,6 +758,7 @@ else
         Name = source.Name,
         Location = source.Location,
         EventDate = source.EventDate,
+        EventDates = source.EventDates?.ToArray() ?? [],
         VolunteerHoursApplicable = source.VolunteerHoursApplicable,
         DefaultVolunteerHours = source.DefaultVolunteerHours,
         Active = source.Active
@@ -808,10 +830,31 @@ else
         newEvent.Name = null;
         newEvent.Location = null;
         newEvent.EventDate = DateTime.Today;
+        newEvent.EventDates = [];
+        newEventDates = [];
         newEvent.VolunteerHoursApplicable = true;
         newEvent.DefaultVolunteerHours = 1;
         newEvent.Active = true;
     }
+
+    private Task OnNewEventDatesChanged(IEnumerable<DateTime> value)
+    {
+        newEventDates = NormalizeDates(value);
+        return Task.CompletedTask;
+    }
+
+    private Task OnSelectedEventDatesChanged(IEnumerable<DateTime> value)
+    {
+        selectedEventDates = NormalizeDates(value);
+        return Task.CompletedTask;
+    }
+
+    private static IEnumerable<DateTime> NormalizeDates(IEnumerable<DateTime>? values) =>
+        (values ?? [])
+            .Select(x => x.Date)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToArray();
 
     private sealed record AttendeeOption
     {

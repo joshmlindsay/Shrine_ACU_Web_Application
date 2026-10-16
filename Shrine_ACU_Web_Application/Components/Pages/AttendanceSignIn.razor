@@ -5,13 +5,27 @@
 @inject AttendanceEventsApiClient EventsApi
 @inject AttendeesApiClient AttendeesApi
 @inject AttendanceRecordsApiClient RecordsApi
+@inject DialogService DialogService
 @inject IWebHostEnvironment Environment
 
 <PageTitle>Attendance Sign-In</PageTitle>
 
-<RadzenStack Gap="1rem">
-    <RadzenText TextStyle="TextStyle.H4">Attendance Sign-In</RadzenText>
-    <RadzenText TextStyle="TextStyle.Body2">Search your name, select your profile, and mark yourself present for today.</RadzenText>
+<RadzenStack Gap="1rem" Style="max-width:860px;margin:0 auto;padding-bottom:1.5rem;">
+    <RadzenCard>
+        <RadzenStack Gap="0.75rem" AlignItems="AlignItems.Center" Style="text-align:center;">
+            <RadzenText TextStyle="TextStyle.H4">Welcome to Attendance</RadzenText>
+            <RadzenText TextStyle="TextStyle.Body1">Find your name, confirm your profile, then tap the button at the bottom.</RadzenText>
+
+            @if (selectedEvent is not null)
+            {
+                <RadzenBadge Text="@selectedEvent.Name" BadgeStyle="BadgeStyle.Primary" />
+                @if (selectedEvent.EventDates?.Length > 0)
+                {
+                    <RadzenText TextStyle="TextStyle.Caption">Open on: @string.Join(", ", selectedEvent.EventDates.OrderBy(x => x).Select(x => x.ToString("MMM d")))</RadzenText>
+                }
+            }
+        </RadzenStack>
+    </RadzenCard>
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
@@ -23,84 +37,69 @@
         <RadzenAlert AlertStyle="AlertStyle.Success">@successMessage</RadzenAlert>
     }
 
-    <RadzenCard>
-        <RadzenStack Gap="1rem">
-            <RadzenFormField Text="Event" Variant="Variant.Outlined" Style="width:100%;">
+    @if (!EventId.HasValue)
+    {
+        <RadzenCard>
+            <RadzenStack Gap="0.5rem">
+                <RadzenText TextStyle="TextStyle.Body2">Event URL was not provided. Select an event to continue.</RadzenText>
                 <RadzenDropDown TValue="int?"
                                 Data="@activeEvents"
                                 TextProperty="Name"
                                 ValueProperty="EventId"
                                 Value="@selectedEventId"
                                 ValueChanged="OnEventChanged"
-                                AllowFiltering="true"
-                                Placeholder="Select an event"
-                                Style="width:100%;" />
-            </RadzenFormField>
+                                Style="width:100%;"
+                                Placeholder="Select an event" />
+            </RadzenStack>
+        </RadzenCard>
+    }
 
-            <RadzenFormField Text="Find your name" Variant="Variant.Outlined" Style="width:100%;">
-                <RadzenTextBox @bind-Value="attendeeLookupText" @oninput="OnAttendeeLookupInput" Style="width:100%;" Placeholder="Start typing your name or school" />
-            </RadzenFormField>
+    <RadzenCard>
+        <RadzenStack Gap="1rem">
+            <RadzenTextBox @bind-Value="attendeeLookupText"
+                           @oninput="OnAttendeeLookupInput"
+                           Placeholder="Type your first or last name"
+                           Style="width:100%;font-size:1.1rem;height:52px;" />
 
-            <RadzenFormField Text="Matching people" Variant="Variant.Outlined" Style="width:100%;">
-                <RadzenDropDown TValue="int?"
-                                Data="@attendeeSuggestions"
-                                TextProperty="DisplayName"
-                                ValueProperty="AttendeeId"
-                                Value="@selectedAttendeeId"
-                                ValueChanged="OnAttendeeSelected"
-                                AllowFiltering="true"
-                                AllowClear="true"
-                                Placeholder="Select yourself if listed"
-                                Style="width:100%;" />
-            </RadzenFormField>
+            <RadzenDropDown TValue="int?"
+                            Data="@attendeeSuggestions"
+                            TextProperty="DisplayName"
+                            ValueProperty="AttendeeId"
+                            Value="@selectedAttendeeId"
+                            ValueChanged="OnAttendeeSelected"
+                            AllowFiltering="true"
+                            AllowClear="true"
+                            Placeholder="Select your name"
+                            Style="width:100%;" />
 
-            <RadzenRow Gap="1rem">
-                <RadzenColumn Size="12" SizeMD="4">
-                    <RadzenFormField Text="First name" Variant="Variant.Outlined" Style="width:100%;">
-                        <RadzenTextBox @bind-Value="signInModel.FirstName" Style="width:100%;" />
-                    </RadzenFormField>
-                </RadzenColumn>
-                <RadzenColumn Size="12" SizeMD="4">
-                    <RadzenFormField Text="Last name" Variant="Variant.Outlined" Style="width:100%;">
-                        <RadzenTextBox @bind-Value="signInModel.LastName" Style="width:100%;" />
-                    </RadzenFormField>
-                </RadzenColumn>
-                <RadzenColumn Size="12" SizeMD="4">
-                    <RadzenFormField Text="Type" Variant="Variant.Outlined" Style="width:100%;">
-                        <RadzenDropDown TValue="AttendeeType"
-                                        Data="@attendeeTypes"
-                                        Value="@signInModel.AttendeeType"
-                                        ValueChanged="@(type => signInModel.AttendeeType = type)"
-                                        Style="width:100%;" />
-                    </RadzenFormField>
-                </RadzenColumn>
-            </RadzenRow>
-
-            <RadzenFormField Text="School name" Variant="Variant.Outlined" Style="width:100%;">
-                <RadzenTextBox @bind-Value="signInModel.SchoolName" @oninput="OnSchoolInput" Style="width:100%;" Placeholder="Type or select a school" />
-            </RadzenFormField>
-
-            @if (schoolSuggestions.Count > 0)
-            {
-                <RadzenFormField Text="Existing schools" Variant="Variant.Outlined" Style="width:100%;">
-                    <RadzenDropDown TValue="string"
-                                    Data="@schoolSuggestions"
-                                    Value="@signInModel.SchoolName"
-                                    ValueChanged="@(value => signInModel.SchoolName = value)"
-                                    AllowFiltering="true"
-                                    AllowClear="true"
-                                    Style="width:100%;"
-                                    Placeholder="Select matching school" />
-                </RadzenFormField>
-            }
-
-            <RadzenButton Text="Mark Present"
-                          Icon="check_circle"
-                          ButtonStyle="ButtonStyle.Primary"
-                          Disabled="@isSubmitting"
-                          Click="SubmitSignInAsync" />
+            <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" Gap="0.5rem" Wrap="FlexWrap.Wrap">
+                <RadzenButton Text="Can't find your name? Sign Up" Icon="person_add" ButtonStyle="ButtonStyle.Light" Click="OpenSignUpAsync" />
+                <RadzenButton Text="Clear Selection" Icon="close" ButtonStyle="ButtonStyle.Light" Click="ClearSelection" Disabled="@(selectedAttendeeId is null && string.IsNullOrWhiteSpace(signInModel.FirstName))" />
+            </RadzenStack>
         </RadzenStack>
     </RadzenCard>
+
+    @if (HasProfile)
+    {
+        <RadzenCard>
+            <RadzenStack Gap="0.5rem" AlignItems="AlignItems.Center" Style="text-align:center;">
+                <RadzenText TextStyle="TextStyle.H5">Confirm Your Info</RadzenText>
+                <RadzenText TextStyle="TextStyle.H6">@DisplayName</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">School: @DisplayValue(signInModel.SchoolName)</RadzenText>
+                <RadzenText TextStyle="TextStyle.Body2">Type: @signInModel.AttendeeType</RadzenText>
+            </RadzenStack>
+        </RadzenCard>
+    }
+
+    <RadzenStack AlignItems="AlignItems.Center" Style="padding-top:0.5rem;">
+        <RadzenButton Text="I'm Here - Mark Me Present"
+                      Icon="check_circle"
+                      Size="ButtonSize.Large"
+                      ButtonStyle="ButtonStyle.Primary"
+                      Disabled="@(!CanSubmit || isSubmitting)"
+                      Click="SubmitSignInAsync"
+                      Style="min-width:320px;width:100%;max-width:520px;height:58px;font-size:1.1rem;" />
+    </RadzenStack>
 
     <RadzenCard>
         <RadzenStack Gap="0.5rem">
@@ -129,8 +128,6 @@
     private readonly List<AttendanceEventDto> activeEvents = [];
     private readonly List<AttendeeSuggestion> attendeeSuggestions = [];
     private readonly List<AttendanceRecordDto> todayRecords = [];
-    private readonly List<string> schoolSuggestions = [];
-    private readonly AttendeeType[] attendeeTypes = [AttendeeType.Student, AttendeeType.Employee, AttendeeType.Guest];
 
     private readonly AttendanceSignInRequestDto signInModel = new()
     {
@@ -144,6 +141,12 @@
     private string? errorMessage;
     private string? successMessage;
     private CancellationTokenSource? attendeeLookupCts;
+
+    private AttendanceEventDto? selectedEvent => activeEvents.FirstOrDefault(x => x.EventId == selectedEventId);
+
+    private bool HasProfile => !string.IsNullOrWhiteSpace(signInModel.FirstName) && !string.IsNullOrWhiteSpace(signInModel.LastName);
+    private bool CanSubmit => selectedEventId.HasValue && HasProfile && IsTodayAllowedForEvent(selectedEvent);
+    private string DisplayName => string.Join(' ', new[] { signInModel.FirstName, signInModel.LastName }.Where(x => !string.IsNullOrWhiteSpace(x))).Trim();
 
     protected override async Task OnInitializedAsync()
     {
@@ -191,7 +194,6 @@
         selectedEventId = eventId;
         signInModel.EventId = eventId ?? 0;
         successMessage = null;
-        selectedAttendeeId = null;
         return LoadTodayRecordsAsync();
     }
 
@@ -208,7 +210,7 @@
 
         try
         {
-            await Task.Delay(300, attendeeLookupCts.Token);
+            await Task.Delay(250, attendeeLookupCts.Token);
             await SearchAttendeesAsync(term, attendeeLookupCts.Token);
         }
         catch (OperationCanceledException)
@@ -219,29 +221,20 @@
     private async Task SearchAttendeesAsync(string? term, CancellationToken cancellationToken)
     {
         attendeeSuggestions.Clear();
-        schoolSuggestions.Clear();
 
         if (string.IsNullOrWhiteSpace(term))
         {
+            selectedAttendeeId = null;
             return;
         }
 
         try
         {
             var page = await AttendeesApi.SearchAsync(term.Trim(), 1, 25, cancellationToken);
-            var suggestions = page.Items
+            attendeeSuggestions.AddRange(page.Items
                 .Where(x => x.AttendeeId.HasValue)
                 .Select(x => new AttendeeSuggestion(x))
-                .OrderBy(x => x.DisplayName)
-                .ToList();
-
-            attendeeSuggestions.AddRange(suggestions);
-            schoolSuggestions.AddRange(
-                page.Items
-                    .Select(x => x.SchoolName)
-                    .Where(x => !string.IsNullOrWhiteSpace(x))
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(x => x));
+                .OrderBy(x => x.DisplayName));
         }
         catch (OperationCanceledException)
         {
@@ -267,15 +260,41 @@
         return Task.CompletedTask;
     }
 
-    private async Task OnSchoolInput(ChangeEventArgs args)
+    private async Task OpenSignUpAsync()
     {
-        var school = args.Value?.ToString();
-        signInModel.SchoolName = school;
+        var result = await DialogService.OpenAsync<AttendanceSignUpDialog>(
+            "Quick Sign Up",
+            new Dictionary<string, object?>
+            {
+                [nameof(AttendanceSignUpDialog.InitialSearchText)] = attendeeLookupText
+            },
+            new DialogOptions
+            {
+                Width = "520px",
+                Resizable = false,
+                Draggable = false,
+                CloseDialogOnOverlayClick = false
+            });
 
-        if (!string.IsNullOrWhiteSpace(school))
+        if (result is AttendanceSignInRequestDto dto)
         {
-            await DebounceLookupAsync(school);
+            selectedAttendeeId = null;
+            signInModel.FirstName = dto.FirstName;
+            signInModel.LastName = dto.LastName;
+            signInModel.SchoolName = dto.SchoolName;
+            signInModel.AttendeeType = dto.AttendeeType;
+            successMessage = "Profile ready. Tap the button below to mark present.";
         }
+    }
+
+    private Task ClearSelection()
+    {
+        selectedAttendeeId = null;
+        signInModel.FirstName = null;
+        signInModel.LastName = null;
+        signInModel.SchoolName = null;
+        signInModel.AttendeeType = AttendeeType.Student;
+        return Task.CompletedTask;
     }
 
     private async Task SubmitSignInAsync()
@@ -285,13 +304,20 @@
 
         if (selectedEventId is null)
         {
-            errorMessage = "Please select an attendance event.";
+            errorMessage = "This page requires a valid attendance event.";
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(signInModel.FirstName) || string.IsNullOrWhiteSpace(signInModel.LastName))
+        var eventModel = activeEvents.FirstOrDefault(x => x.EventId == selectedEventId);
+        if (!IsTodayAllowedForEvent(eventModel))
         {
-            errorMessage = "First and last name are required to sign in.";
+            errorMessage = "This event is not open for attendance today.";
+            return;
+        }
+
+        if (!HasProfile)
+        {
+            errorMessage = "Select your name or use Sign Up first.";
             return;
         }
 
@@ -299,11 +325,10 @@
         signInModel.AttendanceDate = DateTime.Today;
 
         isSubmitting = true;
-
         try
         {
             var result = await RecordsApi.SignInAsync(signInModel);
-            successMessage = $"Attendance marked for {FormatAttendeeName(result?.Attendee) ?? $"{signInModel.FirstName} {signInModel.LastName}"}.";
+            successMessage = $"You're checked in. Thanks, {FormatAttendeeName(result?.Attendee) ?? DisplayName}!";
             await LoadTodayRecordsAsync();
         }
         catch (ApiErrorException ex) when (ex.Error.StatusCode == 409)
@@ -364,6 +389,23 @@
         return string.Join(' ', new[] { attendee.FirstName, attendee.LastName }.Where(x => !string.IsNullOrWhiteSpace(x)));
     }
 
+    private static bool IsTodayAllowedForEvent(AttendanceEventDto? attendanceEvent)
+    {
+        if (attendanceEvent is null)
+        {
+            return false;
+        }
+
+        if (attendanceEvent.EventDates is null || attendanceEvent.EventDates.Length == 0)
+        {
+            return true;
+        }
+
+        return attendanceEvent.EventDates.Any(x => x.Date == DateTime.Today);
+    }
+
+    private static string DisplayValue(string? value) => string.IsNullOrWhiteSpace(value) ? "Not provided" : value;
+
     private sealed record AttendeeSuggestion
     {
         public AttendeeSuggestion(AttendeeDto attendee)
@@ -373,7 +415,9 @@
             LastName = attendee.LastName;
             SchoolName = attendee.SchoolName;
             AttendeeType = attendee.AttendeeType;
-            DisplayName = $"{FirstName} {LastName}".Trim() + (string.IsNullOrWhiteSpace(SchoolName) ? string.Empty : $" ({SchoolName})");
+            DisplayName = string.IsNullOrWhiteSpace(SchoolName)
+                ? $"{FirstName} {LastName}".Trim()
+                : $"{FirstName} {LastName}".Trim() + $" ({SchoolName})";
         }
 
         public int? AttendeeId { get; }

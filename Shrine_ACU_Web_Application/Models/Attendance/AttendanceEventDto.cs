@@ -6,6 +6,7 @@ public sealed class AttendanceEventDto
     public string? Name { get; set; }
     public string? Location { get; set; }
     public DateTime? EventDate { get; set; }
+    public DateTime[] EventDates { get; set; } = [];
     public bool VolunteerHoursApplicable { get; set; }
     public decimal? DefaultVolunteerHours { get; set; }
     public bool Active { get; set; }

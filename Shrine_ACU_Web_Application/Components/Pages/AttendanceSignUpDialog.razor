@@ -1,0 +1,143 @@
+@inject AttendeesApiClient AttendeesApi
+@inject DialogService DialogService
+
+<RadzenStack Gap="1rem" Style="min-width:360px;">
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger">@errorMessage</RadzenAlert>
+    }
+
+    <RadzenText TextStyle="TextStyle.Body2">Enter your details so we can find or create your attendee profile.</RadzenText>
+
+    <RadzenRow Gap="1rem">
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenFormField Text="First Name" Variant="Variant.Outlined" Style="width:100%;">
+                <RadzenTextBox @bind-Value="model.FirstName" Style="width:100%;" />
+            </RadzenFormField>
+        </RadzenColumn>
+        <RadzenColumn Size="12" SizeMD="6">
+            <RadzenFormField Text="Last Name" Variant="Variant.Outlined" Style="width:100%;">
+                <RadzenTextBox @bind-Value="model.LastName" Style="width:100%;" />
+            </RadzenFormField>
+        </RadzenColumn>
+    </RadzenRow>
+
+    <RadzenFormField Text="School Name" Variant="Variant.Outlined" Style="width:100%;">
+        <RadzenTextBox @bind-Value="model.SchoolName" @oninput="OnSchoolInput" Style="width:100%;" Placeholder="Type or pick existing school" />
+    </RadzenFormField>
+
+    @if (schoolSuggestions.Count > 0)
+    {
+        <RadzenDropDown TValue="string"
+                        Data="@schoolSuggestions"
+                        Value="@model.SchoolName"
+                        ValueChanged="@(value => model.SchoolName = value)"
+                        AllowFiltering="true"
+                        AllowClear="true"
+                        Placeholder="Select existing school"
+                        Style="width:100%;" />
+    }
+
+    <RadzenFormField Text="Attendee Type" Variant="Variant.Outlined" Style="width:100%;">
+        <RadzenDropDown TValue="AttendeeType"
+                        Data="@attendeeTypes"
+                        Value="@model.AttendeeType"
+                        ValueChanged="@(value => model.AttendeeType = value)"
+                        Style="width:100%;" />
+    </RadzenFormField>
+
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.End" Gap="0.5rem">
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Click="Cancel" />
+        <RadzenButton Text="Use This Profile" ButtonStyle="ButtonStyle.Primary" Click="Submit" />
+    </RadzenStack>
+</RadzenStack>
+
+@code {
+    [Parameter] public string? InitialSearchText { get; set; }
+
+    private readonly AttendanceSignInRequestDto model = new()
+    {
+        AttendeeType = AttendeeType.Student
+    };
+
+    private readonly List<string> schoolSuggestions = [];
+    private readonly AttendeeType[] attendeeTypes = [AttendeeType.Student, AttendeeType.Employee, AttendeeType.Guest];
+    private string? errorMessage;
+    private CancellationTokenSource? schoolLookupCts;
+
+    protected override void OnInitialized()
+    {
+        if (string.IsNullOrWhiteSpace(InitialSearchText))
+        {
+            return;
+        }
+
+        var split = InitialSearchText.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (split.Length > 0)
+        {
+            model.FirstName = split[0];
+        }
+
+        if (split.Length > 1)
+        {
+            model.LastName = string.Join(' ', split.Skip(1));
+        }
+    }
+
+    private async Task OnSchoolInput(ChangeEventArgs args)
+    {
+        model.SchoolName = args.Value?.ToString();
+        schoolLookupCts?.Cancel();
+        schoolLookupCts = new CancellationTokenSource();
+
+        try
+        {
+            await Task.Delay(250, schoolLookupCts.Token);
+            await LoadSchoolSuggestionsAsync(model.SchoolName, schoolLookupCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task LoadSchoolSuggestionsAsync(string? term, CancellationToken cancellationToken)
+    {
+        schoolSuggestions.Clear();
+
+        if (string.IsNullOrWhiteSpace(term))
+        {
+            return;
+        }
+
+        var result = await AttendeesApi.SearchAsync(term, 1, 25, cancellationToken);
+        schoolSuggestions.AddRange(result.Items
+            .Select(x => x.SchoolName)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x));
+    }
+
+    private void Submit()
+    {
+        errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(model.FirstName) || string.IsNullOrWhiteSpace(model.LastName))
+        {
+            errorMessage = "First and last name are required.";
+            return;
+        }
+
+        DialogService.Close(new AttendanceSignInRequestDto
+        {
+            FirstName = model.FirstName?.Trim(),
+            LastName = model.LastName?.Trim(),
+            SchoolName = string.IsNullOrWhiteSpace(model.SchoolName) ? null : model.SchoolName.Trim(),
+            AttendeeType = model.AttendeeType
+        });
+    }
+
+    private void Cancel()
+    {
+        DialogService.Close(null);
+    }
+}
