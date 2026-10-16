@@ -21,7 +21,7 @@
                 <RadzenBadge Text="@selectedEvent.Name" BadgeStyle="BadgeStyle.Primary" />
                 @if (selectedEvent.EventDates?.Length > 0)
                 {
-                    <RadzenText TextStyle="TextStyle.Caption">Open on: @string.Join(", ", selectedEvent.EventDates.OrderBy(x => x.EventDate).Select(x => x.EventDate.ToString("MMM d")))</RadzenText>
+                    <RadzenText TextStyle="TextStyle.Caption">Open on: @string.Join(", ", selectedEvent.EventDates.Where(x => x.EventDate.HasValue).OrderBy(x => x.EventDate).Select(x => x.EventDate!.Value.ToString("MMM d")))</RadzenText>
                 }
             }
         </RadzenStack>

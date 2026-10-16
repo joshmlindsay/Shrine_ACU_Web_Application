@@ -13,7 +13,17 @@ public sealed class AttendanceRecordsApiClient(IHttpClientFactory httpClientFact
 
     public async Task<PagedResult<AttendanceRecordDto>> SearchAsync(AttendanceSearchRequestDto request, CancellationToken cancellationToken = default)
     {
-        var result = await PostAsync<PagedResult<AttendanceRecordDto>>("/api/AttendanceRecords/search", request, cancellationToken);
+        var payload = new
+        {
+            request.NameOrSchool,
+            request.AttendeeType,
+            request.EventId,
+            AttendanceDate = request.AttendanceDate?.ToString("yyyy-MM-dd"),
+            request.Page,
+            request.PageSize
+        };
+
+        var result = await PostAsync<PagedResult<AttendanceRecordDto>>("/api/AttendanceRecords/search", payload, cancellationToken);
         if (result is not null)
         {
             result.Items ??= [];
@@ -44,8 +54,20 @@ public sealed class AttendanceRecordsApiClient(IHttpClientFactory httpClientFact
     public Task<AttendanceRecordDto?> GetByIdAsync(int id, CancellationToken cancellationToken = default) =>
         GetAsync<AttendanceRecordDto>($"/api/AttendanceRecords/{id}", cancellationToken);
 
-    public Task<AttendanceRecordDto?> SignInAsync(AttendanceSignInRequestDto request, CancellationToken cancellationToken = default) =>
-        PostAsync<AttendanceRecordDto>("/api/AttendanceRecords/sign-in", request, cancellationToken);
+    public Task<AttendanceRecordDto?> SignInAsync(AttendanceSignInRequestDto request, CancellationToken cancellationToken = default)
+    {
+        var payload = new
+        {
+            request.FirstName,
+            request.LastName,
+            request.SchoolName,
+            request.AttendeeType,
+            request.EventId,
+            AttendanceDate = request.AttendanceDate?.ToString("yyyy-MM-dd")
+        };
+
+        return PostAsync<AttendanceRecordDto>("/api/AttendanceRecords/sign-in", payload, cancellationToken);
+    }
 
     public Task<AttendanceRecordDto?> CreateAsync(AttendanceRecordDto dto, CancellationToken cancellationToken = default) =>
         PostAsync<AttendanceRecordDto>("/api/AttendanceRecords", dto, cancellationToken);
