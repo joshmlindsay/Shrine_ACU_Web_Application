@@ -94,6 +94,14 @@ else
                             <RadzenButton Text="Details" Size="ButtonSize.Small" Click="@(async _ => await OpenDetails(result.Entry))" />
                         </Template>
                     </RadzenDataGridColumn>
+                    @if (UserSession.IsAdmin)
+                    {
+                        <RadzenDataGridColumn TItem="CarShowResult" Title="Actions" Sortable="false" Filterable="false" Width="110px">
+                            <Template Context="result">
+                                <RadzenButton Text="Remove" Icon="delete_forever" Size="ButtonSize.Small" ButtonStyle="ButtonStyle.Danger" Disabled="isLoading" Click="@(() => DeleteEntryAsync(result.Entry))" />
+                            </Template>
+                        </RadzenDataGridColumn>
+                    }
                 </Columns>
             </RadzenDataGrid>
         }
@@ -289,6 +297,57 @@ else
         {
             entry.EntryNumber = previousEntryNumber;
             errorMessage = $"Unable to update entry number for entry #{previousEntryNumber ?? entry.EntryId}. {ex.Message}";
+        }
+    }
+
+    private async Task DeleteEntryAsync(CarShowEntryDto entry)
+    {
+        if (!UserSession.IsAdmin)
+        {
+            errorMessage = "Only administrators can remove entries.";
+            return;
+        }
+
+        if (entry.EntryId is not int entryId)
+        {
+            errorMessage = "Unable to remove this entry because its entry id is missing.";
+            return;
+        }
+
+        var entryLabel = entry.EntryNumber?.ToString() ?? entryId.ToString();
+        var confirmed = await DialogService.Confirm(
+            $"Permanently remove entry #{entryLabel}? This cannot be undone.",
+            "Remove Entry",
+            new ConfirmOptions
+            {
+                OkButtonText = "Remove",
+                CancelButtonText = "Cancel"
+            });
+
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        errorMessage = null;
+        successMessage = null;
+        isLoading = true;
+
+        try
+        {
+            await Client.Api.CarShowEntries[entryId].DeleteAsync();
+            entries.RemoveAll(item => item.EntryId == entryId);
+            finalScoresByEntryId.Remove(entryId);
+            results = RebuildResults();
+            successMessage = $"Entry #{entryLabel} was removed.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to remove entry #{entryLabel}. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
         }
     }
 
