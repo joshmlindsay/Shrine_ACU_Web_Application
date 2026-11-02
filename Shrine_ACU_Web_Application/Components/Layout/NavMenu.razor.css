@@ -90,7 +90,8 @@
     padding-bottom: 0.25rem;
 }
 
-.nav-item ::deep .nav-link {
+.nav-item ::deep .nav-link,
+.module-summary {
     color: var(--app-nav-text);
     background: none;
     border: none;
@@ -103,14 +104,57 @@
     white-space: nowrap;
 }
 
-.nav-item ::deep a.active {
+.nav-item ::deep a.active,
+.module-summary.active {
     background-color: var(--app-nav-item-active-bg);
     color: var(--app-nav-text-hover);
 }
 
-.nav-item ::deep .nav-link:hover {
+.nav-item ::deep .nav-link:hover,
+.module-summary:hover,
+.nav-module-dropdown[open] > .module-summary {
     background-color: var(--app-nav-item-hover-bg);
     color: var(--app-nav-text-hover);
+}
+
+.nav-module-dropdown {
+    position: relative;
+}
+
+.nav-module-dropdown > summary {
+    list-style: none;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.nav-module-dropdown > summary::-webkit-details-marker {
+    display: none;
+}
+
+.nav-module-dropdown > summary::after {
+    content: "▾";
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+    opacity: 0.8;
+}
+
+.nav-module-dropdown[open] > summary::after {
+    transform: rotate(180deg);
+}
+
+.module-dropdown-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.15rem 0;
+}
+
+.nav-module-dropdown:not([open]) .module-dropdown-menu {
+    display: none;
+}
+
+.module-dropdown-menu ::deep .module-link {
+    padding-left: 0.75rem;
 }
 
 .navbar-extras {
@@ -184,11 +228,31 @@
         padding-right: 0.25rem !important;
     }
 
-    .nav-item ::deep .nav-link {
+    .nav-item ::deep .nav-link,
+    .module-summary {
         height: 2.75rem;
         line-height: 2.75rem;
         padding: 0 0.75rem;
         width: auto;
+    }
+
+    .nav-module-dropdown[open] .module-dropdown-menu {
+        position: absolute;
+        top: calc(100% + 0.2rem);
+        left: 0.25rem;
+        min-width: 13rem;
+        background-color: var(--app-nav-bg);
+        border: 1px solid var(--app-nav-border);
+        border-radius: 6px;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        z-index: 10;
+    }
+
+    .module-dropdown-menu ::deep .module-link {
+        height: 2.5rem;
+        line-height: 2.5rem;
+        width: 100%;
+        border-radius: 0;
     }
 
     .navbar-extras {

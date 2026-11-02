@@ -70,10 +70,19 @@ public sealed class AttendanceRecordsApiClient(IHttpClientFactory httpClientFact
     }
 
     public Task<AttendanceRecordDto?> CreateAsync(AttendanceRecordDto dto, CancellationToken cancellationToken = default) =>
-        PostAsync<AttendanceRecordDto>("/api/AttendanceRecords", dto, cancellationToken);
+        PostAsync<AttendanceRecordDto>("/api/AttendanceRecords", ToRecordPayload(dto), cancellationToken);
 
     public Task UpdateAsync(int id, AttendanceRecordDto dto, CancellationToken cancellationToken = default) =>
-        PutAsync($"/api/AttendanceRecords/{id}", dto, cancellationToken);
+        PutAsync($"/api/AttendanceRecords/{id}", ToRecordPayload(dto), cancellationToken);
+
+    private static object ToRecordPayload(AttendanceRecordDto dto) => new
+    {
+        dto.AttendanceRecordId,
+        dto.EventId,
+        dto.AttendeeId,
+        AttendanceDate = dto.AttendanceDate.ToString("yyyy-MM-dd"),
+        dto.DurationHours
+    };
 
     public Task DeleteAsync(int id, CancellationToken cancellationToken = default) =>
         DeleteAsync($"/api/AttendanceRecords/{id}", cancellationToken);

@@ -19,86 +19,69 @@
                         </NavLink>
                     </div>
 
-                    <div class="nav-item px-3">
-                        <NavLink class="nav-link" href="attendance/sign-in">
-                            Attendance Sign-In
-                        </NavLink>
-                    </div>
+                    <details class="nav-item nav-module-dropdown px-3">
+                        <summary class="@GetModuleSummaryCss("attendance/sign-in", "manage-attendance")">Attendance</summary>
+                        <div class="module-dropdown-menu">
+                            <NavLink class="nav-link module-link" href="attendance/sign-in">Attendance Sign-In</NavLink>
+                            @if (UserSession.CanManageAttendance)
+                            {
+                                <NavLink class="nav-link module-link" href="manage-attendance">Manage Attendance</NavLink>
+                            }
+                        </div>
+                    </details>
 
                     @if (!UserSession.IsAuthenticated)
                     {
-                        <div class="nav-item px-3">
-                            <NavLink class="nav-link" href="fetch-login">
-                                Login
-                            </NavLink>
-                        </div>
-                        <div class="nav-item px-3">
-                            <NavLink class="nav-link" href="fetch-register">
-                                Create Account
-                            </NavLink>
-                        </div>
+                        <details class="nav-item nav-module-dropdown px-3">
+                            <summary class="@GetModuleSummaryCss("fetch-login", "fetch-register")">Account</summary>
+                            <div class="module-dropdown-menu">
+                                <NavLink class="nav-link module-link" href="fetch-login">Login</NavLink>
+                                <NavLink class="nav-link module-link" href="fetch-register">Create Account</NavLink>
+                            </div>
+                        </details>
                     }
                     else
                     {
-                        @if (UserSession.CanRead)
+                        @if (UserSession.CanRead || UserSession.CanWrite || UserSession.CanManageCarShows || UserSession.CanAccessScoringApplication)
                         {
-                            <div class="nav-item px-3">
-                                <NavLink class="nav-link" href="fetch-carshows">
-                                    Car Shows
-                                </NavLink>
-                            </div>
+                            <details class="nav-item nav-module-dropdown px-3">
+                                <summary class="@GetModuleSummaryCss("fetch-carshows", "fetch-signup", "manage-carshows", "fetch-scoring")">Events</summary>
+                                <div class="module-dropdown-menu">
+                                    @if (UserSession.CanRead)
+                                    {
+                                        <NavLink class="nav-link module-link" href="fetch-carshows">Car Shows</NavLink>
+                                    }
+                                    @if (UserSession.CanWrite)
+                                    {
+                                        <NavLink class="nav-link module-link" href="fetch-signup">Signup</NavLink>
+                                    }
+                                    @if (UserSession.CanManageCarShows)
+                                    {
+                                        <NavLink class="nav-link module-link" href="manage-carshows">Manage Events</NavLink>
+                                    }
+                                    @if (UserSession.CanAccessScoringApplication)
+                                    {
+                                        <NavLink class="nav-link module-link" href="fetch-scoring">Scoring</NavLink>
+                                    }
+                                </div>
+                            </details>
                         }
 
-                        @if (UserSession.CanWrite)
+                        @if (UserSession.CanManage || UserSession.CanManageUsers)
                         {
-                            <div class="nav-item px-3">
-                                <NavLink class="nav-link" href="fetch-signup">
-                                    Signup
-                                </NavLink>
-                            </div>
-                        }
-
-                        @if (UserSession.CanManage)
-                        {
-                            <div class="nav-item px-3">
-                                <NavLink class="nav-link" href="fetch-payments">
-                                    Payments
-                                </NavLink>
-                            </div>
-                        }
-
-                        @if (UserSession.CanManageCarShows)
-                        {
-                            <div class="nav-item px-3">
-                                <NavLink class="nav-link" href="manage-carshows">
-                                    Manage Events
-                                </NavLink>
-                            </div>
-                        }
-                        @if (UserSession.CanManageAttendance)
-                        {
-                            <div class="nav-item px-3">
-                                <NavLink class="nav-link" href="manage-attendance">
-                                    Manage Attendance
-                                </NavLink>
-                            </div>
-                        }
-                        @if (UserSession.CanManageUsers)
-                        {
-                            <div class="nav-item px-3">
-                                <NavLink class="nav-link" href="manage-users">
-                                    Manage Users
-                                </NavLink>
-                            </div>
-                        }
-
-                        @if (UserSession.CanAccessScoringApplication)
-                        {
-                            <div class="nav-item px-3">
-                                <NavLink class="nav-link" href="fetch-scoring">
-                                    Scoring
-                                </NavLink>
-                            </div>
+                            <details class="nav-item nav-module-dropdown px-3">
+                                <summary class="@GetModuleSummaryCss("fetch-payments", "manage-users")">Administration</summary>
+                                <div class="module-dropdown-menu">
+                                    @if (UserSession.CanManage)
+                                    {
+                                        <NavLink class="nav-link module-link" href="fetch-payments">Payments</NavLink>
+                                    }
+                                    @if (UserSession.CanManageUsers)
+                                    {
+                                        <NavLink class="nav-link module-link" href="manage-users">Manage Users</NavLink>
+                                    }
+                                </div>
+                            </details>
                         }
                     }
                 </nav>
@@ -134,6 +117,7 @@
     protected override void OnInitialized()
     {
         UserSession.StateChanged += HandleSessionChanged;
+        Navigation.LocationChanged += HandleLocationChanged;
     }
 
     private void OnEffectiveUserChanged(object? value)
@@ -150,6 +134,13 @@
     {
         await UserSession.LogoutAsync();
         Navigation.NavigateTo("/fetch-login", forceLoad: false);
+    }
+
+    private string GetModuleSummaryCss(params string[] routePrefixes)
+    {
+        var currentPath = Navigation.ToBaseRelativePath(Navigation.Uri).TrimStart('/');
+        var isActive = routePrefixes.Any(prefix => currentPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        return isActive ? "module-summary nav-link active" : "module-summary nav-link";
     }
 
     private static string DisplayUser(AppUserDto? user)
@@ -170,9 +161,12 @@
 
     private void HandleSessionChanged() => InvokeAsync(StateHasChanged);
 
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
         UserSession.StateChanged -= HandleSessionChanged;
+        Navigation.LocationChanged -= HandleLocationChanged;
     }
 }
 
