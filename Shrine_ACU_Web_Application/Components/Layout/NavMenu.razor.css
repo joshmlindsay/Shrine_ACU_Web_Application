@@ -250,9 +250,7 @@
         gap: 0.25rem;
         flex: 1;
         min-width: 0;
-        overflow-x: auto;
-        overflow-y: visible;
-        scrollbar-width: thin;
+        overflow: visible;
     }
 
     .nav-item {
