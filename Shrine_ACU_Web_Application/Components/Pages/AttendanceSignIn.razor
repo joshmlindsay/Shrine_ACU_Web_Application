@@ -14,12 +14,11 @@
 <RadzenStack Gap="1rem" Style="max-width:860px;margin:0 auto;padding-bottom:1.5rem;">
     <RadzenCard>
         <RadzenStack Gap="0.75rem" AlignItems="AlignItems.Center" Style="text-align:center;">
-            <RadzenText TextStyle="TextStyle.H4">Welcome to Attendance</RadzenText>
+            <RadzenText TextStyle="TextStyle.H4">@(selectedEvent?.Name ?? "Attendance")</RadzenText>
             <RadzenText TextStyle="TextStyle.Body1">Find your name, confirm your profile, then tap the button at the bottom.</RadzenText>
 
             @if (selectedEvent is not null)
             {
-                <RadzenBadge Text="@selectedEvent.Name" BadgeStyle="BadgeStyle.Primary" />
                 @if (selectedEvent.EventDates?.Length > 0)
                 {
                     <RadzenText TextStyle="TextStyle.Caption">Open on: @string.Join(", ", selectedEvent.EventDates.Where(x => x.EventDate.HasValue).OrderBy(x => x.EventDate).Select(x => x.EventDate!.Value.ToString("MMM d")))</RadzenText>
@@ -101,8 +100,8 @@
 
     <RadzenCard>
         <RadzenStack Gap="0.5rem">
-            <RadzenText TextStyle="TextStyle.H6">Today's Attendance</RadzenText>
-            <RadzenDataGrid Data="@todayRecords" TItem="AttendanceRecordDto" EmptyText="No attendance has been marked for today yet.">
+            <RadzenText TextStyle="TextStyle.H6">@(selectedAttendeeId.HasValue && HasProfile ? "Attendance for " + DisplayName : "Today's Attendance")</RadzenText>
+            <RadzenDataGrid Data="@VisibleTodayRecords" TItem="AttendanceRecordDto" EmptyText="No attendance has been marked for today yet.">
                 <Columns>
                     <RadzenDataGridColumn TItem="AttendanceRecordDto" Title="Name">
                         <Template Context="record">@FormatAttendeeName(record.Attendee)</Template>
@@ -140,6 +139,13 @@
     private string? successMessage;
 
     private AttendanceEventDto? selectedEvent => activeEvents.FirstOrDefault(x => x.EventId == selectedEventId);
+
+    private IEnumerable<AttendanceRecordDto> VisibleTodayRecords =>
+        selectedAttendeeId.HasValue && HasProfile
+            ? todayRecords.Where(x => x.AttendeeId == selectedAttendeeId ||
+                (string.Equals(x.Attendee?.FirstName, signInModel.FirstName, StringComparison.OrdinalIgnoreCase) &&
+                 string.Equals(x.Attendee?.LastName, signInModel.LastName, StringComparison.OrdinalIgnoreCase)))
+            : todayRecords.Where(x => x.AttendanceDate.ToLocalTime().Date == DateTime.Today);
 
     private bool HasProfile => !string.IsNullOrWhiteSpace(signInModel.FirstName) && !string.IsNullOrWhiteSpace(signInModel.LastName);
     private bool CanSubmit => selectedEventId.HasValue && HasProfile && IsTodayAllowedForEvent(selectedEvent);
@@ -358,15 +364,25 @@
 
         try
         {
-            var result = await RecordsApi.SearchAsync(new AttendanceSearchRequestDto
+            var all = new List<AttendanceRecordDto>();
+            const int pageSize = 250;
+            for (var page = 1; ; page++)
             {
-                EventId = selectedEventId,
-                AttendanceDate = DateTime.Today,
-                Page = 1,
-                PageSize = 100
-            });
+                var result = await RecordsApi.SearchAsync(new AttendanceSearchRequestDto
+                {
+                    EventId = selectedEventId,
+                    Page = page,
+                    PageSize = pageSize
+                });
 
-            todayRecords.AddRange(result.Items.OrderBy(x => x.Attendee?.LastName).ThenBy(x => x.Attendee?.FirstName));
+                all.AddRange(result.Items);
+                if (result.Items.Count < pageSize || all.Count >= result.TotalCount)
+                {
+                    break;
+                }
+            }
+
+            todayRecords.AddRange(all.OrderBy(x => x.Attendee?.LastName).ThenBy(x => x.Attendee?.FirstName));
         }
         catch (Exception ex)
         {
