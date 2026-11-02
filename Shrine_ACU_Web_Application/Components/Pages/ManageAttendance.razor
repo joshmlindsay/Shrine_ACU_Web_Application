@@ -146,6 +146,8 @@ else
                                                           DateFormat="yyyy-MM-dd"
                                                           Style="width:100%;" />
                                     </RadzenFormField>
+                                    <RadzenCheckBox @bind-Value="applyDefaultHoursToMatchingRecords" TValue="bool" Name="applyDefaultHoursToMatchingRecords" />
+                                    <label for="applyDefaultHoursToMatchingRecords" class="ms-2">Apply new default hours to this event's records that still use the previous default hours</label>
                                     <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
                                         <RadzenButton Text="Save Event" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="UpdateEventAsync" Disabled="isBusy" />
                                         <RadzenButton Text="Delete Event" Icon="delete" ButtonStyle="ButtonStyle.Danger" Click="DeleteEventAsync" Disabled="isBusy" />
@@ -261,7 +263,7 @@ else
                                 <RadzenText TextStyle="TextStyle.H6">Filters</RadzenText>
                                 <RadzenRow Gap="1rem">
                                     <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Name or school" Variant="Variant.Outlined" Style="width:100%;"><RadzenTextBox @bind-Value="recordsSearch.NameOrSchool" @oninput="OnRecordsFilterInput" Style="width:100%;" /></RadzenFormField></RadzenColumn>
-                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Event" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int?" Data="@activeEvents" TextProperty="Name" ValueProperty="EventId" @bind-Value="recordsSearch.EventId" AllowClear="true" Style="width:100%;" Change="@(_ => OnRecordsFilterChangedAsync())" /></RadzenFormField></RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Event" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int?" Data="@recordEventOptions" TextProperty="Name" ValueProperty="EventId" @bind-Value="recordsSearch.EventId" AllowClear="true" Style="width:100%;" Change="@(_ => OnRecordsFilterChangedAsync())" /></RadzenFormField></RadzenColumn>
                                     <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Type" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="AttendeeType?" Data="@attendeeTypeFilterOptions" @bind-Value="recordsSearch.AttendeeType" AllowClear="true" Style="width:100%;" Change="@(_ => OnRecordsFilterChangedAsync())" /></RadzenFormField></RadzenColumn>
                                     <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Attendance Date" Variant="Variant.Outlined" Style="width:100%;"><RadzenDatePicker @bind-Value="recordsSearch.AttendanceDate" DateFormat="yyyy-MM-dd" Style="width:100%;" Change="@(_ => OnRecordsFilterChangedAsync())" /></RadzenFormField></RadzenColumn>
                                 </RadzenRow>
@@ -279,13 +281,29 @@ else
                             <RadzenColumn Size="12" SizeMD="4"><RadzenCard><RadzenText TextStyle="TextStyle.H6">By Type</RadzenText><RadzenText TextStyle="TextStyle.Body2">@SummaryTypeText()</RadzenText></RadzenCard></RadzenColumn>
                         </RadzenRow>
 
+                        <RadzenCard>
+                            <RadzenStack Gap="1rem">
+                                <RadzenText TextStyle="TextStyle.H6">Add Attendance Record</RadzenText>
+                                <RadzenRow Gap="1rem">
+                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Event" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int" Data="@recordEventOptions" TextProperty="Name" ValueProperty="EventId" Value="@newRecord.EventId" ValueChanged="OnNewRecordEventChanged" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Attendee" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int" Data="@recordAttendeeOptions" TextProperty="DisplayName" ValueProperty="AttendeeId" Value="@newRecord.AttendeeId" ValueChanged="@(value => newRecord.AttendeeId = value)" AllowFiltering="true" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Date" Variant="Variant.Outlined" Style="width:100%;"><RadzenDatePicker @bind-Value="newRecord.AttendanceDate" DateFormat="yyyy-MM-dd" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                    <RadzenColumn Size="12" SizeMD="3"><RadzenFormField Text="Duration Hours" Variant="Variant.Outlined" Style="width:100%;"><RadzenNumeric @bind-Value="newRecord.DurationHours" Min="0" Step="0.25" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                </RadzenRow>
+                                <RadzenStack Orientation="Orientation.Horizontal" Gap="0.5rem">
+                                    <RadzenButton Text="Add Record" Icon="add" ButtonStyle="ButtonStyle.Primary" Click="CreateRecordAsync" Disabled="isBusy" />
+                                    <RadzenButton Text="Reset" Icon="restart_alt" ButtonStyle="ButtonStyle.Light" Click="ResetNewRecord" Disabled="isBusy" />
+                                </RadzenStack>
+                            </RadzenStack>
+                        </RadzenCard>
+
                         @if (selectedRecord?.AttendanceRecordId is int)
                         {
                             <RadzenCard>
                                 <RadzenStack Gap="1rem">
                                     <RadzenText TextStyle="TextStyle.H6">Edit Attendance Record</RadzenText>
                                     <RadzenRow Gap="1rem">
-                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Event" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int" Data="@activeEvents" TextProperty="Name" ValueProperty="EventId" Value="@selectedRecord.EventId" ValueChanged="@(value => selectedRecord.EventId = value)" Style="width:100%;" /></RadzenFormField></RadzenColumn>
+                                        <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Event" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int" Data="@recordEventOptions" TextProperty="Name" ValueProperty="EventId" Value="@selectedRecord.EventId" ValueChanged="@(value => selectedRecord.EventId = value)" Style="width:100%;" /></RadzenFormField></RadzenColumn>
                                         <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Attendee" Variant="Variant.Outlined" Style="width:100%;"><RadzenDropDown TValue="int" Data="@recordAttendeeOptions" TextProperty="DisplayName" ValueProperty="AttendeeId" Value="@selectedRecord.AttendeeId" ValueChanged="@(value => selectedRecord.AttendeeId = value)" AllowFiltering="true" Style="width:100%;" /></RadzenFormField></RadzenColumn>
                                         <RadzenColumn Size="12" SizeMD="4"><RadzenFormField Text="Date" Variant="Variant.Outlined" Style="width:100%;"><RadzenDatePicker @bind-Value="selectedRecord.AttendanceDate" DateFormat="yyyy-MM-dd" Style="width:100%;" /></RadzenFormField></RadzenColumn>
                                     </RadzenRow>
@@ -341,8 +359,13 @@ else
     private List<AttendeeDto> attendeeRows = [];
     private List<AttendanceRecordDto> recordRows = [];
     private List<AttendeeDto> selectedEventPeople = [];
-    private readonly List<AttendanceEventDto> activeEvents = [];
+    private readonly List<AttendanceEventDto> recordEventOptions = [];
     private readonly List<AttendeeOption> recordAttendeeOptions = [];
+    private readonly AttendanceRecordDto newRecord = new()
+    {
+        AttendanceDate = DateTime.Today,
+        DurationHours = 1
+    };
     private readonly AttendeeType[] attendeeTypes = [AttendeeType.Student, AttendeeType.Employee, AttendeeType.Guest];
     private readonly AttendeeType?[] attendeeTypeFilterOptions = [null, AttendeeType.Student, AttendeeType.Employee, AttendeeType.Guest];
 
@@ -358,6 +381,8 @@ else
     private AttendanceRecordDto? selectedRecord;
     private IEnumerable<DateTime> newEventDates = [];
     private IEnumerable<DateTime> selectedEventDates = [];
+    private decimal? selectedEventOriginalDefaultHours;
+    private bool applyDefaultHoursToMatchingRecords;
 
     private int eventsCount;
     private int attendeesCount;
@@ -495,12 +520,25 @@ else
                 .ThenByDescending(x => x.EventId)
                 .ToList();
 
-            activeEvents.Clear();
-            activeEvents.AddRange(orderedAllEvents.Where(x => x.Active).OrderBy(x => x.EventDate));
+            recordEventOptions.Clear();
+            recordEventOptions.AddRange(orderedAllEvents.Where(x => x.EventId.HasValue));
 
             var attendees = await AttendeesApi.GetPagedAsync(1, 250);
             recordAttendeeOptions.Clear();
             recordAttendeeOptions.AddRange(attendees.Items.Where(x => x.AttendeeId.HasValue).Select(x => new AttendeeOption(x)).OrderBy(x => x.DisplayName));
+
+            if (newRecord.EventId <= 0)
+            {
+                var initialEventId = recordsSearch.EventId
+                    ?? selectedEvent?.EventId
+                    ?? recordEventOptions.FirstOrDefault()?.EventId;
+
+                if (initialEventId.HasValue)
+                {
+                    newRecord.EventId = initialEventId.Value;
+                    ApplyDefaultHoursToNewRecord(initialEventId.Value);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -537,6 +575,8 @@ else
     {
         selectedEvent = CloneEvent(model);
         selectedEventDates = BuildEventDatesForEdit(selectedEvent.EventDate, selectedEvent.EventDates);
+        selectedEventOriginalDefaultHours = model.DefaultVolunteerHours;
+        applyDefaultHoursToMatchingRecords = false;
         successMessage = null;
 
         if (selectedEvent.EventId.HasValue)
@@ -602,15 +642,69 @@ else
 
         await RunBusyAsync(async () =>
         {
+            var originalDefaultHours = selectedEventOriginalDefaultHours;
             selectedEvent.EventDates = BuildEventDateDtosForSave(selectedEventDates, eventId).ToArray();
             var updatePrimaryDate = selectedEvent.EventDates.FirstOrDefault()?.EventDate;
             selectedEvent.EventDate = updatePrimaryDate.HasValue ? updatePrimaryDate.Value.ToDateTime(TimeOnly.MinValue) : null;
             ValidateEvent(selectedEvent);
             await EventsApi.UpdateAsync(eventId, selectedEvent);
-            successMessage = "Attendance event updated.";
+
+            var updatedHoursCount = 0;
+            if (applyDefaultHoursToMatchingRecords && (originalDefaultHours ?? 0m) != (selectedEvent.DefaultVolunteerHours ?? 0m))
+            {
+                updatedHoursCount = await UpdateEventRecordHoursForMatchingDefaultsAsync(eventId, originalDefaultHours, selectedEvent.DefaultVolunteerHours);
+            }
+
+            successMessage = updatedHoursCount > 0
+                ? $"Attendance event updated. Updated {updatedHoursCount} record(s) to {selectedEvent.DefaultVolunteerHours ?? 0m:0.##} hours."
+                : "Attendance event updated.";
+
+            selectedEventOriginalDefaultHours = selectedEvent.DefaultVolunteerHours;
+            applyDefaultHoursToMatchingRecords = false;
             await LoadLookupDataAsync();
             await LoadEventsListAsync();
+            await ReloadRecordsAsync();
         });
+    }
+
+    private async Task<int> UpdateEventRecordHoursForMatchingDefaultsAsync(int eventId, decimal? previousDefaultHours, decimal? newDefaultHours)
+    {
+        var previousHours = previousDefaultHours ?? 0m;
+        var updatedHours = newDefaultHours ?? 0m;
+        var page = 1;
+        const int pageSize = 250;
+        var updatedCount = 0;
+
+        while (true)
+        {
+            var recordsPage = await RecordsApi.SearchAsync(new AttendanceSearchRequestDto
+            {
+                EventId = eventId,
+                Page = page,
+                PageSize = pageSize
+            });
+
+            if (recordsPage.Items.Count == 0)
+            {
+                break;
+            }
+
+            foreach (var record in recordsPage.Items.Where(x => x.AttendanceRecordId.HasValue && x.DurationHours == previousHours))
+            {
+                record.DurationHours = updatedHours;
+                await RecordsApi.UpdateAsync(record.AttendanceRecordId!.Value, record);
+                updatedCount++;
+            }
+
+            if (recordsPage.Items.Count < pageSize)
+            {
+                break;
+            }
+
+            page++;
+        }
+
+        return updatedCount;
     }
 
     private async Task DeleteEventAsync()
@@ -781,6 +875,49 @@ else
         catch (OperationCanceledException)
         {
         }
+    }
+
+    private Task OnNewRecordEventChanged(int eventId)
+    {
+        newRecord.EventId = eventId;
+        ApplyDefaultHoursToNewRecord(eventId);
+        return Task.CompletedTask;
+    }
+
+    private void ApplyDefaultHoursToNewRecord(int eventId)
+    {
+        var selected = recordEventOptions.FirstOrDefault(x => x.EventId == eventId);
+        if (selected?.DefaultVolunteerHours is decimal defaultHours)
+        {
+            newRecord.DurationHours = defaultHours;
+        }
+    }
+
+    private async Task CreateRecordAsync()
+    {
+        await RunBusyAsync(async () =>
+        {
+            if (newRecord.EventId <= 0)
+            {
+                throw new InvalidOperationException("An event is required.");
+            }
+
+            if (newRecord.AttendeeId <= 0)
+            {
+                throw new InvalidOperationException("An attendee is required.");
+            }
+
+            await RecordsApi.CreateAsync(newRecord);
+            successMessage = "Attendance record added.";
+
+            if (selectedEvent?.EventId == newRecord.EventId)
+            {
+                await LoadSelectedEventPeopleAsync(newRecord.EventId);
+            }
+
+            ResetNewRecord();
+            await ReloadRecordsAsync();
+        });
     }
 
     private Task OnRecordRowSelected(AttendanceRecordDto model)
@@ -1056,6 +1193,32 @@ else
         newEvent.VolunteerHoursApplicable = true;
         newEvent.DefaultVolunteerHours = 1;
         newEvent.Active = true;
+    }
+
+    private void ResetNewRecord()
+    {
+        newRecord.AttendeeId = 0;
+        newRecord.AttendanceDate = DateTime.Today;
+
+        int? preferredEventId = recordsSearch.EventId
+            ?? selectedEvent?.EventId
+            ?? recordEventOptions.FirstOrDefault()?.EventId;
+
+        if (!preferredEventId.HasValue && newRecord.EventId > 0)
+        {
+            preferredEventId = newRecord.EventId;
+        }
+
+        if (preferredEventId.HasValue)
+        {
+            newRecord.EventId = preferredEventId.Value;
+            ApplyDefaultHoursToNewRecord(preferredEventId.Value);
+        }
+        else
+        {
+            newRecord.EventId = 0;
+            newRecord.DurationHours = 1;
+        }
     }
 
     private Task OnNewEventDatesChanged(IEnumerable<DateTime> value)
